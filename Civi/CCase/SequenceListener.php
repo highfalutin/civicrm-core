@@ -51,7 +51,7 @@ class SequenceListener implements CaseChangeListener {
       return;
     }
 
-    $actTypes = array_flip(\CRM_Core_PseudoConstant::activityType(TRUE, TRUE, FALSE, 'name'));
+    $actTypes = array_flip(\CRM_Activity_BAO_Activity::buildOptions('activity_type_id', 'validate'));
     $actStatuses = array_flip(\CRM_Activity_BAO_Activity::getStatusesByType(\CRM_Activity_BAO_Activity::COMPLETED));
 
     $actIndex = $analyzer->getActivityIndex(array('activity_type_id', 'status_id'));
@@ -120,7 +120,12 @@ class SequenceListener implements CaseChangeListener {
       'activity_date_time' => \CRM_Utils_Time::getTime('YmdHis'),
       'case_id' => $analyzer->getCaseId(),
     );
-    $r = civicrm_api3('Activity', 'create', $params);
+    $case = $analyzer->getCase();
+    if (!empty($case['contact_id'])) {
+      $params['target_id'] = \CRM_Utils_Array::first($case['contact_id']);
+    }
+
+    civicrm_api3('Activity', 'create', $params);
     $analyzer->flush();
   }
 

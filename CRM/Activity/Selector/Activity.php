@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
 
 /**
@@ -112,8 +112,8 @@ class CRM_Activity_Selector_Activity extends CRM_Core_Selector_Base implements C
     $activityId = NULL,
     $key = NULL,
     $compContext = NULL) {
-    static $activityActTypes = NULL;
-    //CRM-14277 added addtitional param to handle activity search
+
+    //CRM-14277 added additional param to handle activity search
     $extraParams = "&searchContext=activity";
 
     $extraParams .= ($key) ? "&key={$key}" : NULL;
@@ -124,11 +124,10 @@ class CRM_Activity_Selector_Activity extends CRM_Core_Selector_Base implements C
     $showView = TRUE;
     $showUpdate = $showDelete = FALSE;
     $qsUpdate = NULL;
+    $url = NULL;
+    $qsView = NULL;
 
-    if (!$activityActTypes) {
-      $activeActTypes = CRM_Core_PseudoConstant::activityType(TRUE, TRUE, FALSE, 'name', TRUE);
-    }
-    $activityTypeName = CRM_Utils_Array::value($activityTypeId, $activeActTypes);
+    $activityTypeName = CRM_Core_PseudoConstant::getName('CRM_Activity_BAO_Activity', 'activity_type_id', $activityTypeId);
 
     // CRM-7607
     // Lets allow to have normal operation for only activity types.
@@ -393,7 +392,7 @@ class CRM_Activity_Selector_Activity extends CRM_Core_Selector_Base implements C
       'sort' => $sort,
     );
     $config = CRM_Core_Config::singleton();
-    $rows = CRM_Activity_BAO_Activity::getActivities($params);
+    $rows = CRM_Activity_BAO_Activity::deprecatedGetActivities($params);
 
     if (empty($rows)) {
       return $rows;

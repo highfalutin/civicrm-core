@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  * $Id$
  *
  */
@@ -581,14 +581,14 @@ class CRM_Event_BAO_Query extends CRM_Core_BAO_Query {
     $form->assign('dataURLEventFee', $dataURLEventFee);
 
     $form->addEntityRef('event_id', ts('Event Name'), array(
-        'entity' => 'event',
+        'entity' => 'Event',
         'placeholder' => ts('- any -'),
         'multiple' => 1,
         'select' => array('minimumInputLength' => 0),
       )
     );
     $form->addEntityRef('event_type_id', ts('Event Type'), array(
-        'entity' => 'option_value',
+        'entity' => 'OptionValue',
         'placeholder' => ts('- any -'),
         'select' => array('minimumInputLength' => 0),
         'api' => array(

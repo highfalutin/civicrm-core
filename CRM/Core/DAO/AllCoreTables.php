@@ -4,7 +4,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -29,7 +29,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
 class CRM_Core_DAO_AllCoreTables {
 
@@ -198,7 +198,7 @@ class CRM_Core_DAO_AllCoreTables {
    * @return bool
    */
   public static function isCoreTable($tableName) {
-    return FALSE !== array_search($tableName, self::tables());
+    return array_key_exists($tableName, self::tables());
   }
 
   /**

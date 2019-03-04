@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -94,6 +94,24 @@ class CRM_Report_Form_Contribute_DetailTest extends CiviReportTestCase {
 
     $expectedOutputCsvArray = $this->getArrayFromCsv(dirname(__FILE__) . "/{$expectedOutputCsvFile}");
     $this->assertCsvArraysEqual($expectedOutputCsvArray, $reportCsvArray);
+  }
+
+  /**
+   * Test that the pagination widget is present.
+   *
+   * @dataProvider dataProvider
+   * @param $reportClass
+   * @param $inputParams
+   * @throws \Exception
+   */
+  public function testPager($reportClass, $inputParams) {
+    $contactID = $this->individualCreate();
+    for ($i = 1; $i <= 51; $i++) {
+      $this->contributionCreate(['contact_id' => $contactID, 'total_amount' => 50 + $i]);
+    }
+    $reportObj = $this->getReportObject($reportClass, $inputParams);
+    $pager = $reportObj->getTemplate()->_tpl_vars['pager'];
+    $this->assertEquals($pager->_response['numPages'], 2, "Pages in Pager");
   }
 
   /**

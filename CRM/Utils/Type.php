@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
 class CRM_Utils_Type {
   const
@@ -66,6 +66,16 @@ class CRM_Utils_Type {
     BIG = 30,
     FORTYFIVE = 45,
     HUGE = 45;
+
+  /**
+   * Maximum size of a MySQL BLOB or TEXT column in bytes.
+   */
+  const BLOB_SIZE = 65535;
+
+  /**
+   * Maximum value of a MySQL signed INT column.
+   */
+  const INT_MAX = 2147483647;
 
   /**
    * Gets the string representation for a data type.

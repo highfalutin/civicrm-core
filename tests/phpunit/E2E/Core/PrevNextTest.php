@@ -45,11 +45,11 @@ class PrevNextTest extends \CiviEndToEndTestCase {
     $query = new \CRM_Contact_BAO_Query(array(), NULL, NULL, FALSE, FALSE, 1, FALSE, TRUE, FALSE, NULL, 'AND');
     $sql = $query->searchQuery($start, $prefillLimit, $sort, FALSE, $query->_includeContactIds,
       FALSE, TRUE, TRUE);
-    $selectSQL = "SELECT DISTINCT '$this->cacheKey', contact_a.id, contact_a.sort_name";
+    $selectSQL = "SELECT DISTINCT %1, contact_a.id, contact_a.sort_name";
     $sql = str_replace(array("SELECT contact_a.id as contact_id", "SELECT contact_a.id as id"), $selectSQL, $sql);
 
     $this->assertTrue(
-      $this->prevNext->fillWithSql($this->cacheKey, $sql),
+      $this->prevNext->fillWithSql($this->cacheKey, $sql, [1 => [$this->cacheKey, 'String']]),
       "fillWithSql should return TRUE on success"
     );
 
@@ -91,6 +91,19 @@ class PrevNextTest extends \CiviEndToEndTestCase {
     $this->assertEquals([1], array_unique(array_values($all)));
 
     $this->assertSelections([]);
+  }
+
+  public function testFetch() {
+    $this->testFillArray();
+
+    $cids = $this->prevNext->fetch($this->cacheKey, 0, 2);
+    $this->assertEquals([100, 400], $cids);
+
+    $cids = $this->prevNext->fetch($this->cacheKey, 0, 4);
+    $this->assertEquals([100, 400, 200, 300], $cids);
+
+    $cids = $this->prevNext->fetch($this->cacheKey, 2, 2);
+    $this->assertEquals([200, 300], $cids);
   }
 
   public function getFillFunctions() {

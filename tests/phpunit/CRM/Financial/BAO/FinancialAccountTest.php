@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -371,7 +371,7 @@ class CRM_Financial_BAO_FinancialAccountTest extends CiviUnitTestCase {
       'source' => 'SSF',
       'contribution_status_id' => 1,
     ));
-    $balance = CRM_Core_BAO_FinancialTrxn::getPartialPaymentWithType($contribution['id'], 'contribution', FALSE, $totalAmount);
+    $balance = CRM_Contribute_BAO_Contribution::getContributionBalance($contribution['id'], $totalAmount);
     $this->assertEquals(0.0, $balance);
     Civi::settings()->revert('contribution_invoice_settings');
   }

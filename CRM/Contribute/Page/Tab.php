@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
 class CRM_Contribute_Page_Tab extends CRM_Core_Page {
 
@@ -81,19 +81,28 @@ class CRM_Contribute_Page_Tab extends CRM_Core_Page {
     if ($recurID) {
       $links = self::$_links;
       $paymentProcessorObj = CRM_Financial_BAO_PaymentProcessor::getProcessorForEntity($recurID, 'recur', 'obj');
-      if (is_object($paymentProcessorObj) && $paymentProcessorObj->supports('cancelRecurring')) {
+      if (!is_object($paymentProcessorObj)) {
+        unset($links[CRM_Core_Action::DISABLE]);
+        unset($links[CRM_Core_Action::UPDATE]);
+        return $links;
+      }
+      if ($paymentProcessorObj->supports('cancelRecurring')) {
         unset($links[CRM_Core_Action::DISABLE]['extra'], $links[CRM_Core_Action::DISABLE]['ref']);
         $links[CRM_Core_Action::DISABLE]['url'] = "civicrm/contribute/unsubscribe";
         $links[CRM_Core_Action::DISABLE]['qs'] = "reset=1&crid=%%crid%%&cid=%%cid%%&context={$context}";
       }
 
-      if (is_object($paymentProcessorObj) && $paymentProcessorObj->isSupported('updateSubscriptionBillingInfo')) {
+      if ($paymentProcessorObj->supports('UpdateSubscriptionBillingInfo')) {
         $links[CRM_Core_Action::RENEW] = array(
           'name' => ts('Change Billing Details'),
           'title' => ts('Change Billing Details'),
           'url' => 'civicrm/contribute/updatebilling',
           'qs' => "reset=1&crid=%%crid%%&cid=%%cid%%&context={$context}",
         );
+      }
+
+      if (!$paymentProcessorObj->supports('ChangeSubscriptionAmount') && !$paymentProcessorObj->supports('EditRecurringContribution')) {
+        unset($links[CRM_Core_Action::UPDATE]);
       }
       return $links;
     }
@@ -144,10 +153,11 @@ class CRM_Contribute_Page_Tab extends CRM_Core_Page {
     if (!empty($softCreditList)) {
       $softCreditTotals = array();
 
-      list($softCreditTotals['amount'],
+      list($softCreditTotals['count'],
+        $softCreditTotals['cancel']['count'],
+        $softCreditTotals['amount'],
         $softCreditTotals['avg'],
-        $softCreditTotals['currency'],
-        $softCreditTotals['cancelAmount'] // to get cancel amount
+        $softCreditTotals['cancel']['amount'] // to get cancel amount
         ) = CRM_Contribute_BAO_ContributionSoft::getSoftContributionTotals($this->_contactId, $isTest);
 
       $this->assign('softCredit', TRUE);
@@ -233,9 +243,14 @@ class CRM_Contribute_Page_Tab extends CRM_Core_Page {
   private function buildRecurringContributionsArray($recurContributions) {
     $liveRecurringContributionCount = 0;
     foreach ($recurContributions as $recurId => $recurDetail) {
-      $action = array_sum(array_keys($this->recurLinks($recurId)));
-      // no action allowed if it's not active
-      $recurContributions[$recurId]['is_active'] = (!CRM_Contribute_BAO_Contribution::isContributionStatusNegative($recurDetail['contribution_status_id']));
+      // Is recurring contribution active?
+      $recurContributions[$recurId]['is_active'] = !in_array(CRM_Contribute_PseudoConstant::contributionStatus($recurDetail['contribution_status_id'], 'name'), CRM_Contribute_BAO_ContributionRecur::getInactiveStatuses());
+      if ($recurContributions[$recurId]['is_active']) {
+        $actionMask = array_sum(array_keys(self::recurLinks($recurId)));
+      }
+      else {
+        $actionMask = CRM_Core_Action::mask([CRM_Core_Permission::VIEW]);
+      }
 
       if (empty($recurDetail['is_test'])) {
         $liveRecurringContributionCount++;
@@ -250,27 +265,18 @@ class CRM_Contribute_Page_Tab extends CRM_Core_Page {
         $recurContributions[$recurId]['contribution_status'] = CRM_Core_PseudoConstant::getLabel('CRM_Contribute_BAO_ContributionRecur', 'contribution_status_id', $recurDetail['contribution_status_id']);
       }
 
-      if ($recurContributions[$recurId]['is_active']) {
-        $details = CRM_Contribute_BAO_ContributionRecur::getSubscriptionDetails($recurContributions[$recurId]['id'], 'recur');
-        $hideUpdate = $details->membership_id & $details->auto_renew;
-
-        if ($hideUpdate) {
-          $action -= CRM_Core_Action::UPDATE;
-        }
-
-        $recurContributions[$recurId]['action'] = CRM_Core_Action::formLink(self::recurLinks($recurId), $action,
-          array(
-            'cid' => $this->_contactId,
-            'crid' => $recurId,
-            'cxt' => 'contribution',
-          ),
-          ts('more'),
-          FALSE,
-          'contribution.selector.recurring',
-          'Contribution',
-          $recurId
-        );
-      }
+      $recurContributions[$recurId]['action'] = CRM_Core_Action::formLink(self::recurLinks($recurId), $actionMask,
+        array(
+          'cid' => $this->_contactId,
+          'crid' => $recurId,
+          'cxt' => 'contribution',
+        ),
+        ts('more'),
+        FALSE,
+        'contribution.selector.recurring',
+        'Contribution',
+        $recurId
+      );
     }
 
     return [$recurContributions, $liveRecurringContributionCount];

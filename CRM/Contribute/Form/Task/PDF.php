@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
 
 /**
@@ -200,8 +200,12 @@ AND    {$this->_componentClause}";
 
       $values = array();
       if (isset($params['from_email_address']) && !$elements['createPdf']) {
+        // If a logged in user from email is used rather than a domain wide from email address
+        // the from_email_address params key will be numerical and we need to convert it to be
+        // in normal from email format
+        $from = CRM_Utils_Mail::formatFromAddress($params['from_email_address']);
         // CRM-19129 Allow useres the choice of From Email to send the receipt from.
-        $fromDetails = explode(' <', $params['from_email_address']);
+        $fromDetails = explode(' <', $from);
         $input['receipt_from_email'] = substr(trim($fromDetails[1]), 0, -1);
         $input['receipt_from_name'] = str_replace('"', '', $fromDetails[0]);
       }

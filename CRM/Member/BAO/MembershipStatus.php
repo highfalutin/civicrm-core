@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  * $Id$
  *
  */
@@ -212,7 +212,6 @@ class CRM_Member_BAO_MembershipStatus extends CRM_Member_DAO_MembershipStatus {
     }
     $membershipStatus->delete();
     CRM_Member_PseudoConstant::flush('membershipStatus');
-    $membershipStatus->free();
   }
 
   /**
@@ -361,8 +360,6 @@ class CRM_Member_BAO_MembershipStatus extends CRM_Member_DAO_MembershipStatus {
     }
     //end fetch
 
-    $membershipStatus->free();
-
     //we bundle the arguments into an array as we can't pass 8 variables to the hook otherwise
     // the membership array might contain the pre-altered settings so we don't want to merge this
     $arguments = array(
@@ -394,7 +391,6 @@ class CRM_Member_BAO_MembershipStatus extends CRM_Member_DAO_MembershipStatus {
     while ($membershipStatus->fetch()) {
       $statusIds[] = $membershipStatus->id;
     }
-    $membershipStatus->free();
     return $statusIds;
   }
 

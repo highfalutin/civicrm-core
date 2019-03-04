@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
 
 /**
@@ -771,6 +771,11 @@ ORDER BY civicrm_address.is_primary DESC, civicrm_address.location_type_id DESC,
       $streetAddress = trim($streetAddress);
     }
 
+    // If street number is too large, we cannot store it.
+    if ($parseFields['street_number'] > CRM_Utils_Type::INT_MAX) {
+      return $emptyParseFields;
+    }
+
     // suffix might be like 1/2
     $matches = array();
     if (preg_match('/^\d\/\d/', $streetAddress, $matches)) {
@@ -1349,7 +1354,7 @@ SELECT is_primary,
       case 'world_region':
       case 'worldregion':
       case 'worldregion_id':
-        return CRM_Core_PseudoConstant::worldRegion();
+        return CRM_Core_BAO_Country::buildOptions('region_id', $context, $props);
     }
     return CRM_Core_PseudoConstant::get(__CLASS__, $fieldName, $params, $context);
   }

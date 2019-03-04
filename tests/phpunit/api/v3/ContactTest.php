@@ -150,21 +150,17 @@ class api_v3_ContactTest extends CiviUnitTestCase {
    *
    * @param string $string
    *   String to be tested.
-   * @param bool $checkCharSet
+   *
    *   Bool to see if we should check charset.
    *
    * @throws \Exception
    */
-  public function testInternationalStrings($string, $checkCharSet = FALSE) {
+  public function testInternationalStrings($string) {
     $this->callAPISuccess('Contact', 'create', array_merge(
       $this->_params,
       array('first_name' => $string)
     ));
-    if ($checkCharSet) {
-      if (!CRM_Utils_SQL::supportStorageOfAccents()) {
-        $this->markTestIncomplete('Database is not Charset UTF8 therefore can not store accented strings properly');
-      }
-    }
+
     $result = $this->callAPISuccessGetSingle('Contact', array('first_name' => $string));
     $this->assertEquals($string, $result['first_name']);
 
@@ -183,8 +179,8 @@ class api_v3_ContactTest extends CiviUnitTestCase {
    */
   public function getInternationalStrings() {
     $invocations = array();
-    $invocations[] = array('Scarabée', TRUE);
-    $invocations[] = array('Iñtërnâtiônàlizætiøn', TRUE);
+    $invocations[] = array('Scarabée');
+    $invocations[] = array('Iñtërnâtiônàlizætiøn');
     $invocations[] = array('これは日本語のテキストです。読めますか');
     $invocations[] = array('देखें हिन्दी कैसी नजर आती है। अरे वाह ये तो नजर आती है।');
     return $invocations;
@@ -394,6 +390,22 @@ class api_v3_ContactTest extends CiviUnitTestCase {
     $contact = $this->callAPISuccess('contact', 'create', $params);
     $params['sort_name'] = 'abc1';
     $this->getAndCheck($params, $contact['id'], 'contact');
+  }
+
+  /**
+   * Test that name searches are case insensitive.
+   */
+  public function testGetNameVariantsCaseInsensitive() {
+    $this->callAPISuccess('contact', 'create', [
+      'display_name' => 'Abc1',
+      'contact_type' => 'Individual',
+    ]);
+    $this->callAPISuccessGetSingle('Contact', ['display_name' => 'aBc1']);
+    $this->callAPISuccessGetSingle('Contact', ['sort_name' => 'aBc1']);
+    Civi::settings()->set('includeNickNameInName', TRUE);
+    $this->callAPISuccessGetSingle('Contact', ['display_name' => 'aBc1']);
+    $this->callAPISuccessGetSingle('Contact', ['sort_name' => 'aBc1']);
+    Civi::settings()->set('includeNickNameInName', FALSE);
   }
 
   /**
@@ -1780,6 +1792,12 @@ class api_v3_ContactTest extends CiviUnitTestCase {
 
     $result = $this->callAPISuccess('contact', 'getquick', $params);
     $this->assertEquals(17, $result['values'][0]['id']);
+    $params = array(
+      'name' => "TestContact@example.com",
+      'field_name' => 'sort_name',
+    );
+    $result = $this->callAPISuccess('contact', 'getquick', $params);
+    $this->assertEquals(17, $result['values'][0]['id']);
   }
 
   /**
@@ -2049,6 +2067,13 @@ class api_v3_ContactTest extends CiviUnitTestCase {
       'id' => '@user:exampleUser',
     ));
     $this->assertEquals('testGetByUsername', $result['values'][$cid]['first_name']);
+
+    // Check search of contacts with & without uf records
+    $result = $this->callAPISuccess('Contact', 'get', ['uf_user' => 1]);
+    $this->assertArrayHasKey($cid, $result['values']);
+
+    $result = $this->callAPISuccess('Contact', 'get', ['uf_user' => 0]);
+    $this->assertArrayNotHasKey($cid, $result['values']);
   }
 
   /**
@@ -3183,7 +3208,7 @@ class api_v3_ContactTest extends CiviUnitTestCase {
    * CRM-15443 - ensure getlist api does not return deleted contacts.
    */
   public function testGetlistExcludeConditions() {
-    $name = md5(time());
+    $name = 'Scarabée';
     $contact = $this->individualCreate(array('last_name' => $name));
     $this->individualCreate(array('last_name' => $name, 'is_deceased' => 1));
     $this->individualCreate(array('last_name' => $name, 'is_deleted' => 1));
@@ -3817,6 +3842,31 @@ class api_v3_ContactTest extends CiviUnitTestCase {
     $this->assertEquals(array('external_identifier'), $result['values']['UI_external_identifier']);
   }
 
+  /**
+   * API test to retrieve contact from group having different group title and name.
+   */
+  public function testContactGetFromGroup() {
+    $groupId = $this->groupCreate([
+      'name' => 'Test_Group',
+      'domain_id' => 1,
+      'title' => 'New Test Group Created',
+      'description' => 'New Test Group Created',
+      'is_active' => 1,
+      'visibility' => 'User and User Admin Only',
+    ]);
+    $contact = $this->callAPISuccess('contact', 'create', $this->_params);
+    $groupContactCreateParams = array(
+      'contact_id' => $contact['id'],
+      'group_id' => $groupId,
+      'status' => 'Pending',
+    );
+    $groupContact = $this->callAPISuccess('groupContact', 'create', $groupContactCreateParams);
+    $groupGetContact = $this->CallAPISuccess('groupContact', 'get', $groupContactCreateParams);
+    $this->CallAPISuccess('Contact', 'getcount', [
+      'group' => "Test_Group",
+    ]);
+  }
+
   public function testSmartGroupsForRelatedContacts() {
     $rtype1 = $this->callAPISuccess('relationship_type', 'create', array(
       "name_a_b" => uniqid() . " Child of",
@@ -3875,6 +3925,98 @@ class api_v3_ContactTest extends CiviUnitTestCase {
     $this->assertTrue($g1Contacts['count'] == 1);
     $this->assertTrue($g2Contacts['count'] == 2);
     $this->assertTrue($g3Contacts['count'] == 1);
+  }
+
+  /**
+   * Test creating a note from the contact.create API call when only passing the note as a string.
+   */
+  public function testCreateNoteinCreate() {
+    $loggedInContactID = $this->createLoggedInUser();
+    $this->_params['note'] = "Test note created by API Call as a String";
+    $contact = $this->callAPISuccess('Contact', 'create', $this->_params);
+    $note = $this->callAPISuccess('Note', 'get', ['contact_id' => $loggedInContactID]);
+    $this->assertEquals($note['values'][$note['id']]['note'], "Test note created by API Call as a String");
+    $note = $this->callAPISuccess('Note', 'get', ['entity_id' => $contact['id']]);
+    $this->assertEquals($note['values'][$note['id']]['note'], "Test note created by API Call as a String");
+    $this->callAPISuccess('Contact', 'delete', ['id' => $contact['id'], 'skip_undelete' => TRUE]);
+  }
+
+  /**
+   * Test Creating a note from the contact.create api call when passing the note params as an array.
+   */
+  public function testCreateNoteinCreateArrayFormat() {
+    $contact1 = $this->callAPISuccess('Contact', 'create', array('first_name' => 'Alan', 'last_name' => 'MouseMouse', 'contact_type' => 'Individual'));
+    $this->_params['note'] = [['note' => "Test note created by API Call as array", 'contact_id' => $contact1['id']]];
+    $contact2 = $this->callAPISuccess('Contact', 'create', $this->_params);
+    $note = $this->callAPISuccess('Note', 'get', ['contact_id' => $contact1['id']]);
+    $this->assertEquals($note['values'][$note['id']]['note'], "Test note created by API Call as array");
+    $note = $this->callAPISuccess('Note', 'get', ['entity_id' => $contact2['id']]);
+    $this->assertEquals($note['values'][$note['id']]['note'], "Test note created by API Call as array");
+  }
+
+  /**
+   * Verify that passing tag IDs to Contact.get works
+   *
+   * Tests the following formats
+   * - Contact.get tag='id1'
+   * - Contact.get tag='id1,id2'
+   * - Contact.get tag='id1, id2'
+   */
+  public function testContactGetWithTag() {
+    $contact = $this->callApiSuccess('Contact', 'create', [
+      'contact_type' => 'Individual',
+      'first_name' => 'Test',
+      'last_name' => 'Tagged',
+      'email' => 'test@example.org',
+    ]);
+    $tags = [];
+    foreach (['Tag A', 'Tag B'] as $name) {
+      $tags[] = $this->callApiSuccess('Tag', 'create', [
+        'name' => $name
+      ]);
+    }
+
+    // assign contact to "Tag B"
+    $this->callApiSuccess('EntityTag', 'create', [
+      'entity_table' => 'civicrm_contact',
+      'entity_id' => $contact['id'],
+      'tag_id' => $tags[1]['id'],
+    ]);
+
+    // test format Contact.get tag='id1'
+    $contact_get = $this->callAPISuccess('Contact', 'get', [
+      'tag' => $tags[1]['id'],
+      'return' => 'tag',
+    ]);
+    $this->assertEquals(1, $contact_get['count']);
+    $this->assertEquals($contact['id'], $contact_get['id']);
+    $this->assertEquals('Tag B', $contact_get['values'][$contact['id']]['tags']);
+
+    // test format Contact.get tag='id1,id2'
+    $contact_get = $this->callAPISuccess('Contact', 'get', [
+      'tag' => $tags[0]['id'] . ',' . $tags[1]['id'],
+      'return' => 'tag',
+    ]);
+    $this->assertEquals(1, $contact_get['count']);
+    $this->assertEquals($contact['id'], $contact_get['id']);
+    $this->assertEquals('Tag B', $contact_get['values'][$contact['id']]['tags']);
+
+    // test format Contact.get tag='id1, id2'
+    $contact_get = $this->callAPISuccess('Contact', 'get', [
+      'tag' => $tags[0]['id'] . ', ' . $tags[1]['id'],
+      'return' => 'tag',
+    ]);
+    $this->assertEquals(1, $contact_get['count']);
+    $this->assertEquals($contact['id'], $contact_get['id']);
+    $this->assertEquals('Tag B', $contact_get['values'][$contact['id']]['tags']);
+
+    foreach ($tags as $tag) {
+      $this->callAPISuccess('Tag', 'delete', ['id' => $tag['id']]);
+    }
+    $this->callAPISuccess('Contact', 'delete', [
+      'id' => $contact['id'],
+      'skip_undelete' => TRUE
+    ]);
   }
 
 }

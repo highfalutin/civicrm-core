@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -30,6 +30,9 @@
  * @group headless
  */
 class CRM_Contribute_BAO_ContributionTest extends CiviUnitTestCase {
+
+  use CRMTraits_Financial_FinancialACLTrait;
+  use CRMTraits_Financial_PriceSetTrait;
 
   /**
    * Clean up after tests.
@@ -303,6 +306,79 @@ class CRM_Contribute_BAO_ContributionTest extends CiviUnitTestCase {
     $this->assertDBCompareValue('CRM_Contribute_DAO_Contribution', $id, 'total_amount',
       'id', ltrim($annual[2], $currencySymbol), 'Check DB for total amount of the contribution'
     );
+  }
+
+  /**
+   * Test that financial type data is not added to the annual query if acls not enabled.
+   */
+  public function testAnnualQueryWithFinancialACLsEnabled() {
+    $this->enableFinancialACLs();
+    $this->createLoggedInUserWithFinancialACL();
+    $permittedFinancialType = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'financial_type_id', 'Donation');
+    $sql = CRM_Contribute_BAO_Contribution::getAnnualQuery([1, 2, 3]);
+    $this->assertContains('SUM(total_amount) as amount,', $sql);
+    $this->assertContains('WHERE b.contact_id IN (1,2,3)', $sql);
+    $this->assertContains('b.financial_type_id IN (' . $permittedFinancialType . ')', $sql);
+
+    // Run it to make sure it's not bad sql.
+    CRM_Core_DAO::executeQuery($sql);
+    $this->disableFinancialACLs();
+  }
+
+  /**
+   * Test the annual query returns a correct result when multiple line items are present.
+   */
+  public function testAnnualWithMultipleLineItems() {
+    $contactID = $this->createLoggedInUserWithFinancialACL();
+    $this->createContributionWithTwoLineItemsAgainstPriceSet([
+      'contact_id' => $contactID]
+    );
+    $this->enableFinancialACLs();
+    $sql = CRM_Contribute_BAO_Contribution::getAnnualQuery([$contactID]);
+    $result = CRM_Core_DAO::executeQuery($sql);
+    $result->fetch();
+    $this->assertEquals(300, $result->amount);
+    $this->assertEquals(1, $result->count);
+    $this->disableFinancialACLs();
+  }
+
+  /**
+   * Test that financial type data is not added to the annual query if acls not enabled.
+   */
+  public function testAnnualQueryWithFinancialACLsDisabled() {
+    $sql = CRM_Contribute_BAO_Contribution::getAnnualQuery([1, 2, 3]);
+    $this->assertContains('SUM(total_amount) as amount,', $sql);
+    $this->assertContains('WHERE b.contact_id IN (1,2,3)', $sql);
+    $this->assertNotContains('b.financial_type_id', $sql);
+    //$this->assertNotContains('line_item', $sql);
+    // Run it to make sure it's not bad sql.
+    CRM_Core_DAO::executeQuery($sql);
+  }
+
+  /**
+   * Test that financial type data is not added to the annual query if acls not enabled.
+   */
+  public function testAnnualQueryWithFinancialHook() {
+    $this->hookClass->setHook('civicrm_selectWhereClause', array($this, 'aclIdNoZero'));
+    $sql = CRM_Contribute_BAO_Contribution::getAnnualQuery([1, 2, 3]);
+    $this->assertContains('SUM(total_amount) as amount,', $sql);
+    $this->assertContains('WHERE b.contact_id IN (1,2,3)', $sql);
+    $this->assertContains('b.id NOT IN (0)', $sql);
+    $this->assertNotContains('b.financial_type_id', $sql);
+    CRM_Core_DAO::executeQuery($sql);
+  }
+
+  /**
+   * Add ACL denying values LIKE '0'.
+   *
+   * @param string $entity
+   * @param string $clauses
+   */
+  public function aclIdNoZero($entity, &$clauses) {
+    if ($entity != 'Contribution') {
+      return;
+    }
+    $clauses['id'] = "NOT IN (0)";
   }
 
   /**

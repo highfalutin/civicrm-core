@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
 
 /**
@@ -57,7 +57,7 @@ class CRM_Event_Form_ManageEvent_Conference extends CRM_Event_Form_ManageEvent {
     );
 
     $this->addEntityRef('parent_event_id', ts('Parent Event'), array(
-        'entity' => 'event',
+        'entity' => 'Event',
         'placeholder' => ts('- any -'),
         'select' => array('minimumInputLength' => 0),
       )

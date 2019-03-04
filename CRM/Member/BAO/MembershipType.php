@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  * $Id$
  *
  */
@@ -281,7 +281,6 @@ class CRM_Member_BAO_MembershipType extends CRM_Member_DAO_MembershipType {
     while ($membershipType->fetch()) {
       $membershipTypes[$membershipType->id] = $membershipType->name;
     }
-    $membershipType->free();
     return $membershipTypes;
   }
 
@@ -300,7 +299,6 @@ class CRM_Member_BAO_MembershipType extends CRM_Member_DAO_MembershipType {
     $membershipType->id = $membershipTypeId;
     if ($membershipType->find(TRUE)) {
       CRM_Core_DAO::storeValues($membershipType, $membershipTypeDetails);
-      $membershipType->free();
       return $membershipTypeDetails;
     }
     else {

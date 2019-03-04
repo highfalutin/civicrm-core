@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
 
 /**
@@ -589,9 +589,10 @@ class CRM_Contribute_Form_ContributionPage_Amount extends CRM_Contribute_Form_Co
             if (isset($values[$i]) &&
               (strlen(trim($values[$i])) > 0)
             ) {
+              $values[$i] = $params['value'][$i] = CRM_Utils_Rule::cleanMoney(trim($values[$i]));
               $options[] = array(
                 'label' => trim($labels[$i]),
-                'value' => CRM_Utils_Rule::cleanMoney(trim($values[$i])),
+                'value' => $values[$i],
                 'weight' => $i,
                 'is_active' => 1,
                 'is_default' => $default == $i,

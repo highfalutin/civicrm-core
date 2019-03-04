@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -135,6 +135,7 @@ class CRM_Member_Form_MembershipTest extends CiviUnitTestCase {
         'civicrm_membership_type',
         'civicrm_membership',
         'civicrm_uf_match',
+        'civicrm_email',
       )
     );
     foreach (array(17, 18, 23, 32) as $contactID) {
@@ -142,14 +143,6 @@ class CRM_Member_Form_MembershipTest extends CiviUnitTestCase {
     }
     $this->callAPISuccess('relationship_type', 'delete', array('id' => 20));
   }
-
-  /**
-   *  Test CRM_Member_Form_Membership::buildQuickForm()
-   */
-  //function testCRMMemberFormMembershipBuildQuickForm()
-  //{
-  //    throw new PHPUnit_Framework_IncompleteTestError( "not implemented" );
-  //}
 
   /**
    *  Test CRM_Member_Form_Membership::formRule() with a parameter
@@ -1111,6 +1104,9 @@ Expires: ',
    * @return \CRM_Member_Form_Membership
    */
   protected function getForm() {
+    if (isset($_REQUEST['cid'])) {
+      unset($_REQUEST['cid']);
+    }
     $form = new CRM_Member_Form_Membership();
     $_SERVER['REQUEST_METHOD'] = 'GET';
     $form->controller = new CRM_Core_Controller();

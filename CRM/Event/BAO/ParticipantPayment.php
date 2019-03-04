@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -29,7 +29,7 @@
  *
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  * $Id$
  *
  */
@@ -71,10 +71,10 @@ class CRM_Event_BAO_ParticipantPayment extends CRM_Event_DAO_ParticipantPayment 
       $participantPayment->find(TRUE);
     }
     if ($id) {
-      CRM_Utils_Hook::post('edit', 'ParticipantPayment', $id, $participantPayment);
+      CRM_Utils_Hook::post('edit', 'ParticipantPayment', $participantPayment->id, $participantPayment);
     }
     else {
-      CRM_Utils_Hook::post('create', 'ParticipantPayment', NULL, $participantPayment);
+      CRM_Utils_Hook::post('create', 'ParticipantPayment', $participantPayment->id, $participantPayment);
     }
 
     //generally if people are creating participant_payments via the api they won't be setting the line item correctly - we can't help them if they are doing complex transactions

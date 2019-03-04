@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  * $Id$
  *
  */
@@ -219,7 +219,7 @@ class CRM_Core_BAO_CustomValueTable {
             default:
               break;
           }
-          if (strtolower($value) === "null") {
+          if ($value === 'null') {
             // when unsetting a value to null, we don't need to validate the type
             // https://projectllr.atlassian.net/browse/VGQBMP-20
             $set[$field['column_name']] = $value;

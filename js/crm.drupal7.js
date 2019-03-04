@@ -1,5 +1,5 @@
 // http://civicrm.org/licensing
-CRM.$(function($) {
+(function($) {
   $(document)
     .on('dialogopen', function(e) {
       // D7 hack to get the toolbar out of the way (CRM-15341)
@@ -11,5 +11,4 @@ CRM.$(function($) {
         $('#toolbar').css('z-index', '');
       }
     });
-    $('#civicrm-menu').css({'width': '97%'});
-});
+})(CRM.$);

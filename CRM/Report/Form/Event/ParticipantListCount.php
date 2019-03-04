@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,9 +28,9 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
-class CRM_Report_Form_Event_ParticipantListCount extends CRM_Report_Form_Event {
+class CRM_Report_Form_Event_ParticipantListCount extends CRM_Report_Form {
 
   protected $_summary = NULL;
   protected $_groupFilter = TRUE;
@@ -238,7 +238,7 @@ class CRM_Report_Form_Event_ParticipantListCount extends CRM_Report_Form_Event {
             'operatorType' => CRM_Report_Form::OP_ENTITYREF,
             'type' => CRM_Utils_Type::T_INT,
             'attributes' => array(
-              'entity' => 'event',
+              'entity' => 'Event',
               'select' => array('minimumInputLength' => 0),
             ),
           ),

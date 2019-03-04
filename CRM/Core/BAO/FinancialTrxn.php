@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
 class CRM_Core_BAO_FinancialTrxn extends CRM_Financial_DAO_FinancialTrxn {
   /**
@@ -405,7 +405,7 @@ WHERE ceft.entity_id = %1";
     else {
       $financialTypeId = $params['financial_type_id'];
     }
-    $financialAccount = CRM_Contribute_PseudoConstant::getRelationalFinancialAccount($financialTypeId, 'Expense Account is');
+    $financialAccount = CRM_Financial_BAO_FinancialAccount::getFinancialAccountForFinancialTypeByRelationship($financialTypeId, 'Expense Account is');
 
     $params['trxnParams']['from_financial_account_id'] = $params['to_financial_account_id'];
     $params['trxnParams']['to_financial_account_id'] = $financialAccount;
@@ -437,23 +437,27 @@ WHERE ceft.entity_id = %1";
   }
 
   /**
-   * get partial payment amount and type of it.
+   * get partial payment amount.
+   *
+   * @deprecated
+   *
+   * This function basically calls CRM_Contribute_BAO_Contribution::getContributionBalance
+   * - just do that. If need be we could have a fn to get the contribution id but
+   * chances are the calling functions already know it anyway.
    *
    * @param int $entityId
    * @param string $entityName
-   * @param bool $returnType
    * @param int $lineItemTotal
    *
-   * @return array|int|NULL|string
-   *   [payment type => amount]
-   *   payment type: 'amount_owed' or 'refund_due'
+   * @return array
    */
-  public static function getPartialPaymentWithType($entityId, $entityName = 'participant', $returnType = TRUE, $lineItemTotal = NULL) {
+  public static function getPartialPaymentWithType($entityId, $entityName = 'participant', $lineItemTotal = NULL) {
     $value = NULL;
     if (empty($entityName)) {
       return $value;
     }
 
+    // @todo - deprecate passing in entity & type - just figure out contribution id FIRST
     if ($entityName == 'participant') {
       $contributionId = CRM_Core_DAO::getFieldValue('CRM_Event_DAO_ParticipantPayment', $entityId, 'contribution_id', 'participant_id');
     }
@@ -466,80 +470,40 @@ WHERE ceft.entity_id = %1";
     $financialTypeId = CRM_Core_DAO::getFieldValue('CRM_Contribute_DAO_Contribution', $contributionId, 'financial_type_id');
 
     if ($contributionId && $financialTypeId) {
-      $statusId = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Completed');
-      $refundStatusId = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Refunded');
 
-      if (empty($lineItemTotal)) {
-        $lineItemTotal = CRM_Price_BAO_LineItem::getLineTotal($contributionId);
+      $paymentVal = CRM_Contribute_BAO_Contribution::getContributionBalance($contributionId, $lineItemTotal);
+      $value = [];
+      if ($paymentVal < 0) {
+        $value['refund_due'] = $paymentVal;
       }
-      $sqlFtTotalAmt = "
-SELECT SUM(ft.total_amount)
-FROM civicrm_financial_trxn ft
-  INNER JOIN civicrm_entity_financial_trxn eft ON (ft.id = eft.financial_trxn_id AND eft.entity_table = 'civicrm_contribution' AND eft.entity_id = {$contributionId})
-WHERE ft.is_payment = 1
-  AND ft.status_id IN ({$statusId}, {$refundStatusId})
-";
-
-      $ftTotalAmt = CRM_Core_DAO::singleValueQuery($sqlFtTotalAmt);
-      if (!$ftTotalAmt) {
-        $ftTotalAmt = 0;
-      }
-      $currency = CRM_Core_DAO::getFieldValue('CRM_Contribute_DAO_Contribution', $contributionId, 'currency');
-      $value = $paymentVal = CRM_Utils_Money::subtractCurrencies($lineItemTotal, $ftTotalAmt, $currency);
-      if ($returnType) {
-        $value = array();
-        if ($paymentVal < 0) {
-          $value['refund_due'] = $paymentVal;
-        }
-        elseif ($paymentVal > 0) {
-          $value['amount_owed'] = $paymentVal;
-        }
-        elseif ($lineItemTotal == $ftTotalAmt) {
-          $value['full_paid'] = $ftTotalAmt;
-        }
+      elseif ($paymentVal > 0) {
+        $value['amount_owed'] = $paymentVal;
       }
     }
     return $value;
   }
 
   /**
-   * @param int $contributionId
+   * @param int $contributionID
+   * @param bool $includeRefund
    *
    * @return string
    */
-  public static function getTotalPayments($contributionId) {
-    $statusId = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Completed');
+  public static function getTotalPayments($contributionID, $includeRefund = FALSE) {
+    $statusIDs = [CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Completed')];
+
+    if ($includeRefund) {
+      $statusIDs[] = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'contribution_status_id', 'Refunded');
+    }
 
     $sql = "SELECT SUM(ft.total_amount) FROM civicrm_financial_trxn ft
       INNER JOIN civicrm_entity_financial_trxn eft ON (eft.financial_trxn_id = ft.id AND eft.entity_table = 'civicrm_contribution')
-      WHERE eft.entity_id = %1 AND ft.is_payment = 1 AND ft.status_id = %2";
+      WHERE eft.entity_id = %1 AND ft.is_payment = 1 AND ft.status_id IN (%2) ";
 
-    $params = array(
-      1 => array($contributionId, 'Integer'),
-      2 => array($statusId, 'Integer'),
-    );
-
-    return CRM_Core_DAO::singleValueQuery($sql, $params);
-  }
-
-  /**
-   * Function records partial payment, complete's contribution if payment is fully paid
-   * and returns latest payment ie financial trxn
-   *
-   * @param array $contribution
-   * @param array $params
-   *
-   * @return \CRM_Financial_DAO_FinancialTrxn
-   */
-  public static function getPartialPaymentTrxn($contribution, $params) {
-    $trxn = CRM_Contribute_BAO_Contribution::recordPartialPayment($contribution, $params);
-    $paid = CRM_Core_BAO_FinancialTrxn::getTotalPayments($params['contribution_id']);
-    $total = CRM_Core_DAO::getFieldValue('CRM_Contribute_DAO_Contribution', $params['contribution_id'], 'total_amount');
-    $cmp = bccomp($total, $paid, 5);
-    if ($cmp == 0 || $cmp == -1) {// If paid amount is greater or equal to total amount
-      civicrm_api3('Contribution', 'completetransaction', array('id' => $contribution['id']));
-    }
-    return $trxn;
+    return CRM_Core_DAO::singleValueQuery($sql, [
+      1 => [$contributionID, 'Integer'],
+      2 => [implode(',', $statusIDs), 'CommaSeparatedIntegers'],
+    ]);
   }
 
   /**

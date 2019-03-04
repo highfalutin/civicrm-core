@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
 
 /**
@@ -559,7 +559,6 @@ WHERE {$clause}
     //really this should use Activity BAO& not be here but refactoring will have to be later
     //actually the whole ajax call could be done as an api ajax call & post hook would be sorted
     CRM_Utils_Hook::post('edit', 'Activity', $activity->id, $activity);
-    $activity->free();
 
     return $activityId;
   }

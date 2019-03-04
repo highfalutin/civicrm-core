@@ -6,6 +6,7 @@
  */
 class CRM_Contact_BAO_QueryTest extends CiviUnitTestCase {
   use CRMTraits_Financial_FinancialACLTrait;
+  use CRMTraits_Financial_PriceSetTrait;
 
   /**
    * @return CRM_Contact_BAO_QueryTestDataProvider
@@ -19,6 +20,7 @@ class CRM_Contact_BAO_QueryTest extends CiviUnitTestCase {
   }
 
   public function tearDown() {
+    $this->quickCleanUpFinancialEntities();
     $tablesToTruncate = array(
       'civicrm_group_contact',
       'civicrm_group',
@@ -97,10 +99,7 @@ class CRM_Contact_BAO_QueryTest extends CiviUnitTestCase {
 
     $queryObj = new CRM_Contact_BAO_Query($params, $returnProperties);
     try {
-      $resultDAO = $queryObj->searchQuery(0, 0, NULL,
-        FALSE, FALSE,
-        FALSE, FALSE,
-        FALSE);
+      $resultDAO = $queryObj->searchQuery();
       $this->assertTrue($resultDAO->fetch());
     }
     catch (PEAR_Exception $e) {
@@ -139,10 +138,7 @@ class CRM_Contact_BAO_QueryTest extends CiviUnitTestCase {
 
     $queryObj = new CRM_Contact_BAO_Query($params, $returnProperties);
     try {
-      $resultDAO = $queryObj->searchQuery(0, 0, NULL,
-        FALSE, FALSE,
-        FALSE, FALSE,
-        FALSE);
+      $resultDAO = $queryObj->searchQuery();
       $this->assertFalse($resultDAO->fetch());
     }
     catch (PEAR_Exception $e) {
@@ -175,7 +171,7 @@ class CRM_Contact_BAO_QueryTest extends CiviUnitTestCase {
         0 => array(
           0 => 'email',
           1 => 'LIKE',
-          2 => 'secondary@example.com',
+          2 => 'sEcondary@example.com',
           3 => 0,
           4 => 1,
         ),
@@ -187,10 +183,7 @@ class CRM_Contact_BAO_QueryTest extends CiviUnitTestCase {
       );
 
       $queryObj = new CRM_Contact_BAO_Query($params, $returnProperties);
-      $resultDAO = $queryObj->searchQuery(0, 0, NULL,
-        FALSE, FALSE,
-        FALSE, FALSE,
-        FALSE);
+      $resultDAO = $queryObj->searchQuery();
 
       if ($searchPrimary) {
         $this->assertEquals($resultDAO->N, 0);
@@ -209,6 +202,48 @@ class CRM_Contact_BAO_QueryTest extends CiviUnitTestCase {
   }
 
   /**
+   *  Test created to prove failure of search on state when location
+   *  display name is different form location name (issue 607)
+   */
+  public function testSearchOtherLocationUpperLower() {
+
+    $params = [
+      0 => [
+        0 => 'state_province-4',
+        1 => 'IS NOT EMPTY',
+        2 => '',
+        3 => 1,
+        4 => 0,
+      ],
+    ];
+    $returnProperties = [
+      'contact_type' => 1,
+      'contact_sub_type' => 1,
+      'sort_name' => 1,
+      'location' => [
+        'other' => [
+          'location_type' => 4,
+          'state_province' => 1,
+        ],
+      ],
+    ];
+
+    // update with the api does not work because it updates both the name and the
+    // the display_name. Plain SQL however does the job
+    CRM_Core_DAO::executeQuery('update civicrm_location_type set name=%2 where id=%1',
+      [
+        1 => [4, 'Integer'],
+        2 => ['other', 'String'],
+      ]);
+
+    $queryObj = new CRM_Contact_BAO_Query($params, $returnProperties);
+
+    $resultDAO = $queryObj->searchQuery();
+    $resultDAO->fetch();
+  }
+
+
+  /**
    * CRM-14263 search builder failure with search profile & address in criteria.
    *
    * We are retrieving primary here - checking the actual sql seems super prescriptive - but since the massive query object has
@@ -223,8 +258,8 @@ class CRM_Contact_BAO_QueryTest extends CiviUnitTestCase {
     CRM_Core_Config::singleton()->defaultSearchProfileID = 1;
     $this->callAPISuccess('address', 'create', array(
         'contact_id' => $contactID,
-        'city' => 'Cool City',
-        'street_address' => 'Long Street',
+        'city' => 'Cool CITY',
+        'street_address' => 'Long STREET',
         'location_type_id' => 1,
       ));
     $returnProperties = array(
@@ -235,10 +270,7 @@ class CRM_Contact_BAO_QueryTest extends CiviUnitTestCase {
     $expectedSQL = "SELECT contact_a.id as contact_id, contact_a.contact_type as `contact_type`, contact_a.contact_sub_type as `contact_sub_type`, contact_a.sort_name as `sort_name`, civicrm_address.id as address_id, " . $selectClause . "  FROM civicrm_contact contact_a LEFT JOIN civicrm_address ON ( contact_a.id = civicrm_address.contact_id AND civicrm_address.is_primary = 1 ) WHERE  (  ( " . $whereClause . " )  )  AND (contact_a.is_deleted = 0)    ORDER BY `contact_a`.`sort_name` ASC, `contact_a`.`id` ";
     $queryObj = new CRM_Contact_BAO_Query($params, $returnProperties);
     try {
-      $this->assertEquals($expectedSQL, $queryObj->searchQuery(0, 0, NULL,
-        FALSE, FALSE,
-        FALSE, FALSE,
-        TRUE));
+      $this->assertEquals($expectedSQL, $queryObj->getSearchSQL());
       list($select, $from, $where, $having) = $queryObj->query();
       $dao = CRM_Core_DAO::executeQuery("$select $from $where $having");
       $dao->fetch();
@@ -257,13 +289,13 @@ class CRM_Contact_BAO_QueryTest extends CiviUnitTestCase {
   public function getSearchProfileData() {
     return [
       [
-        [['city', '=', 'Cool City', 1, 0]], "civicrm_address.city as `city`", "LOWER(civicrm_address.city) = 'cool city'",
+        [['city', '=', 'Cool City', 1, 0]], "civicrm_address.city as `city`", "civicrm_address.city = 'Cool City'",
       ],
       [
         // Note that in the query 'long street' is lower cased. We eventually want to change that & not mess with the vars - it turns out
         // it doesn't work on some charsets. However, the the lcasing affects more vars & we are looking to stagger removal of lcasing 'in case'
         // (although we have been removing without blowback since 2017)
-        [['street_address', '=', 'Long Street', 1, 0]], "civicrm_address.street_address as `street_address`", "civicrm_address.street_address LIKE '%long street%'",
+        [['street_address', '=', 'Long Street', 1, 0]], "civicrm_address.street_address as `street_address`", "civicrm_address.street_address LIKE '%Long Street%'",
       ],
     ];
   }
@@ -382,7 +414,7 @@ class CRM_Contact_BAO_QueryTest extends CiviUnitTestCase {
     );
 
     $sql = $query->query(FALSE);
-    $this->assertEquals("WHERE  ( civicrm_address.postal_code = 'eh10 4rb-889' )  AND (contact_a.is_deleted = 0)", $sql[2]);
+    $this->assertEquals("WHERE  ( civicrm_address.postal_code = 'EH10 4RB-889' )  AND (contact_a.is_deleted = 0)", $sql[2]);
     $result = CRM_Core_DAO::executeQuery(implode(' ', $sql));
     $this->assertEquals(1, $result->N);
 
@@ -508,6 +540,12 @@ class CRM_Contact_BAO_QueryTest extends CiviUnitTestCase {
     );
     $sql = CRM_Contact_BAO_Query::getQuery($params);
     $this->assertContains('INNER JOIN civicrm_rel_temp_', $sql, "Query appears to use temporary table of compiled relationships?", TRUE);
+  }
+
+  public function testRelationshipPermissionClause() {
+    $params = [['relation_type_id', 'IN', ['1_b_a'], 0, 0], ['relation_permission', 'IN', [2], 0, 0]];
+    $sql = CRM_Contact_BAO_Query::getQuery($params);
+    $this->assertContains('(civicrm_relationship.is_permission_a_b IN (2))', $sql);
   }
 
   /**
@@ -663,12 +701,31 @@ civicrm_relationship.is_active = 1 AND
    * Test the summary query does not add an acl clause when acls not enabled..
    */
   public function testGetSummaryQueryWithFinancialACLDisabled() {
+    $this->createContributionsForSummaryQueryTests();
+
+    // Test the function directly
     $where = $from = NULL;
     $queryObject = new CRM_Contact_BAO_Query();
-    $query = $queryObject->appendFinancialTypeWhereAndFromToQueryStrings($where,
+    $queryObject->appendFinancialTypeWhereAndFromToQueryStrings($where,
       $from);
-    $this->assertEquals($where, $query[0]);
-    $this->assertEquals($from, $query[1]);
+    $this->assertEquals(NULL, $where);
+    $this->assertEquals(NULL, $from);
+
+    // Test the function in action
+    $queryObject = new CRM_Contact_BAO_Query([['contribution_source', '=', 'SSF', '', '']]);
+    $summary = $queryObject->summaryContribution();
+    $this->assertEquals([
+      'total' => [
+        'avg' => '$ 233.33',
+        'amount' => '$ 1,400.00',
+        'count' => 6,
+        ],
+      'cancel' => [
+        'count' => 2,
+        'amount' => '$ 100.00',
+        'avg' => '$ 50.00',
+      ],
+    ], $summary);
   }
 
   /**
@@ -676,16 +733,35 @@ civicrm_relationship.is_active = 1 AND
    */
   public function testGetSummaryQueryWithFinancialACLEnabled() {
     $where = $from = NULL;
+    $this->createContributionsForSummaryQueryTests();
     $this->enableFinancialACLs();
     $this->createLoggedInUserWithFinancialACL();
+
+    // Test the function directly
     $queryObject = new CRM_Contact_BAO_Query();
-    $query = $queryObject->appendFinancialTypeWhereAndFromToQueryStrings($where,
+    $queryObject->appendFinancialTypeWhereAndFromToQueryStrings($where,
       $from);
     $donationTypeID = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'financial_type_id', 'Donation');
     $this->assertEquals(
       " LEFT JOIN civicrm_line_item li
                   ON civicrm_contribution.id = li.contribution_id AND
                      li.entity_table = 'civicrm_contribution' AND li.financial_type_id NOT IN ({$donationTypeID}) ", $from);
+
+    // Test the function in action
+    $queryObject = new CRM_Contact_BAO_Query([['contribution_source', '=', 'SSF', '', '']]);
+    $summary = $queryObject->summaryContribution();
+    $this->assertEquals([
+      'total' => [
+        'avg' => '$ 200.00',
+        'amount' => '$ 400.00',
+        'count' => 2,
+      ],
+      'cancel' => [
+        'count' => 1,
+        'amount' => '$ 50.00',
+        'avg' => '$ 50.00',
+      ],
+    ], $summary);
     $this->disableFinancialACLs();
   }
 
@@ -725,6 +801,55 @@ civicrm_relationship.is_active = 1 AND
     // Check other fv values are in params
     $this->assertEquals($modparams['membership_is_current_member'][2], $fv_orig['membership_is_current_member']);
     $this->assertEquals($modparams['member_is_primary'][2], $fv_orig['member_is_primary']);
+  }
+
+  /**
+   * Create contributions to test summary calculations.
+   *
+   * financial type     | cancel_date        |total_amount| source    | line_item_financial_types  |number_line_items| line_amounts
+   * Donation           |NULL                | 100.00     |SSF         | Donation                  | 1                | 100.00
+   * Member Dues        |NULL                | 100.00     |SSF         | Member Dues               | 1                | 100.00
+   * Donation           |NULL                | 300.00     |SSF         | Event Fee,Event Fee       | 2                | 200.00,100.00
+   * Donation           |NULL                | 300.00     |SSF         | Event Fee,Donation        | 2                | 200.00,100.00
+   * Donation           |NULL                | 300.00     |SSF         | Donation,Donation         | 2                | 200.00,100.00
+   * Donation           |2019-02-13 00:00:00 | 50.00      |SSF         | Donation                  | 1                | 50.00
+   * Member Dues        |2019-02-13 00:00:00 | 50.00      |SSF         | Member Dues               | 1                | 50.00
+   */
+  protected function createContributionsForSummaryQueryTests() {
+    $contactID = $this->individualCreate();
+    $this->contributionCreate(['contact_id' => $contactID]);
+    $this->contributionCreate([
+      'contact_id' => $contactID,
+      'total_amount' => 100,
+      'financial_type_id' => 'Member Dues',
+    ]);
+    $eventFeeType = CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'financial_type_id', 'Event Fee');
+    $this->createContributionWithTwoLineItemsAgainstPriceSet(['contact_id' => $contactID, 'source' => 'SSF']);
+    $this->createContributionWithTwoLineItemsAgainstPriceSet(['contact_id' => $contactID, 'source' => 'SSF'], [
+      CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'financial_type_id', 'Donation'),
+      $eventFeeType,
+    ]);
+    $this->createContributionWithTwoLineItemsAgainstPriceSet(['contact_id' => $contactID, 'source' => 'SSF'], [
+      CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'financial_type_id', 'Donation'),
+      CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'financial_type_id', 'Donation'),
+    ]);
+    $this->createContributionWithTwoLineItemsAgainstPriceSet(['contact_id' => $contactID, 'source' => 'SSF', 'financial_type_id' => $eventFeeType], [
+      CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'financial_type_id', 'Donation'),
+      CRM_Core_PseudoConstant::getKey('CRM_Contribute_BAO_Contribution', 'financial_type_id', 'Donation'),
+    ]);
+    $this->contributionCreate([
+      'contact_id' => $contactID,
+      'total_amount' => 50,
+      'contribution_status_id' => 'Cancelled',
+      'cancel_date' => 'yesterday',
+    ]);
+    $this->contributionCreate([
+      'contact_id' => $contactID,
+      'total_amount' => 50,
+      'contribution_status_id' => 'Cancelled',
+      'cancel_date' => 'yesterday',
+      'financial_type_id' => 'Member Dues',
+    ]);
   }
 
 }

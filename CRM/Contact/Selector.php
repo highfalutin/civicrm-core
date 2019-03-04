@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
 
 /**
@@ -536,11 +536,11 @@ class CRM_Contact_Selector extends CRM_Core_Selector_Base implements CRM_Core_Se
   public function getTotalCount($action) {
     // Use count from cache during paging/sorting
     if (!empty($_GET['crmPID']) || !empty($_GET['crmSID'])) {
-      $count = CRM_Core_BAO_Cache::getItem('Search Results Count', $this->_key);
+      $count = Civi::cache('long')->get("Search Results Count $this->_key");
     }
     if (empty($count)) {
       $count = $this->_query->searchQuery(0, 0, NULL, TRUE);
-      CRM_Core_BAO_Cache::setItem($count, 'Search Results Count', $this->_key);
+      Civi::cache('long')->set("Search Results Count $this->_key", $count);
     }
     return $count;
   }
@@ -578,8 +578,11 @@ class CRM_Contact_Selector extends CRM_Core_Selector_Base implements CRM_Core_Se
     // and contain the search criteria (parameters)
     // note that the default action is basic
     if ($rowCount) {
+      /** @var CRM_Core_PrevNextCache_Interface $prevNext */
+      $prevNext = Civi::service('prevnext');
       $cacheKey = $this->buildPrevNextCache($sort);
-      $resultSet = $this->_query->getCachedContacts($cacheKey, $offset, $rowCount, $includeContactIds)->fetchGenerator();
+      $cids = $prevNext->fetch($cacheKey, $offset, $rowCount);
+      $resultSet = empty($cids) ? [] : $this->_query->getCachedContacts($cids, $includeContactIds)->fetchGenerator();
     }
     else {
       $resultSet = $this->_query->searchQuery($offset, $rowCount, $sort, FALSE, $includeContactIds)->fetchGenerator();
@@ -1025,8 +1028,8 @@ class CRM_Contact_Selector extends CRM_Core_Selector_Base implements CRM_Core_Se
     }
     // For core searches use the searchQuery method
     else {
-      $sql = $this->_query->searchQuery($start, $end, $sort, FALSE, $this->_query->_includeContactIds,
-        FALSE, TRUE, TRUE);
+      $sql = $this->_query->getSearchSQL($start, $end, $sort, FALSE, $this->_query->_includeContactIds,
+        FALSE, TRUE);
     }
 
     // CRM-9096
@@ -1038,11 +1041,11 @@ class CRM_Contact_Selector extends CRM_Core_Selector_Base implements CRM_Core_Se
     // the other alternative of running the FULL query will just be incredibly inefficient
     // and slow things down way too much on large data sets / complex queries
 
-    $selectSQL = "SELECT DISTINCT '$cacheKey', contact_a.id, contact_a.sort_name";
+    $selectSQL = "SELECT DISTINCT %1, contact_a.id, contact_a.sort_name";
 
-    $sql = str_replace(array("SELECT contact_a.id as contact_id", "SELECT contact_a.id as id"), $selectSQL, $sql);
+    $sql = str_ireplace(array("SELECT contact_a.id as contact_id", "SELECT contact_a.id as id"), $selectSQL, $sql);
     try {
-      Civi::service('prevnext')->fillWithSql($cacheKey, $sql);
+      Civi::service('prevnext')->fillWithSql($cacheKey, $sql, [1 => [$cacheKey, 'String']]);
     }
     catch (CRM_Core_Exception $e) {
       if ($coreSearch) {
@@ -1059,8 +1062,10 @@ class CRM_Contact_Selector extends CRM_Core_Selector_Base implements CRM_Core_Se
       }
     }
 
-    // also record an entry in the cache key table, so we can delete it periodically
-    CRM_Core_BAO_Cache::setItem($cacheKey, 'CiviCRM Search PrevNextCache', $cacheKey);
+    if (Civi::service('prevnext') instanceof CRM_Core_PrevNextCache_Sql) {
+      // SQL-backed prevnext cache uses an extra record for pruning the cache.
+      CRM_Core_BAO_Cache::setItem($cacheKey, 'CiviCRM Search PrevNextCache', $cacheKey);
+    }
   }
 
   /**
@@ -1187,7 +1192,7 @@ class CRM_Contact_Selector extends CRM_Core_Selector_Base implements CRM_Core_Se
    * @return CRM_Contact_DAO_Contact
    */
   public function alphabetQuery() {
-    return $this->_query->searchQuery(NULL, NULL, NULL, FALSE, FALSE, TRUE);
+    return $this->_query->alphabetQuery();
   }
 
   /**

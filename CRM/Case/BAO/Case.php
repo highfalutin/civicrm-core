@@ -3,7 +3,7 @@
  +--------------------------------------------------------------------+
  | CiviCRM version 5                                                  |
  +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2018                                |
+ | Copyright CiviCRM LLC (c) 2004-2019                                |
  +--------------------------------------------------------------------+
  | This file is a part of CiviCRM.                                    |
  |                                                                    |
@@ -28,7 +28,7 @@
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2018
+ * @copyright CiviCRM LLC (c) 2004-2019
  */
 
 /**
@@ -396,7 +396,6 @@ WHERE cc.contact_id = %1 AND civicrm_case_type.name = '{$caseType}'";
       $caseArray[] = $dao->id;
     }
 
-    $dao->free();
     return $caseArray;
   }
 
@@ -528,9 +527,7 @@ LEFT JOIN civicrm_option_group aog ON aog.name='activity_type'
         ON t_act.case_id = civicrm_case.id
  LEFT JOIN civicrm_phone ON (civicrm_phone.contact_id = civicrm_contact.id AND civicrm_phone.is_primary=1)
  LEFT JOIN civicrm_relationship case_relationship
- ON ( case_relationship.contact_id_a = civicrm_case_contact.contact_id AND case_relationship.contact_id_b = {$userID}
-      AND case_relationship.case_id = civicrm_case.id )
-
+ ON ( case_relationship.contact_id_a = civicrm_case_contact.contact_id AND case_relationship.contact_id_b = {$userID} AND case_relationship.is_active AND case_relationship.case_id = civicrm_case.id )
  LEFT JOIN civicrm_relationship_type case_relation_type
  ON ( case_relation_type.id = case_relationship.relationship_type_id
       AND case_relation_type.id = case_relationship.relationship_type_id )
@@ -589,9 +586,14 @@ LEFT JOIN civicrm_option_group aog ON aog.name='activity_type'
     $condition = NULL;
     $casesList = array();
 
-    //validate access for own cases.
+    // validate access for own cases.
     if (!self::accessCiviCase()) {
       return $getCount ? 0 : $casesList;
+    }
+
+    // Return cached value instead of re-running query
+    if (isset(Civi::$statics[__CLASS__]['totalCount']) && $getCount) {
+      return Civi::$statics[__CLASS__]['totalCount'];
     }
 
     $type = CRM_Utils_Array::value('type', $params, 'upcoming');
@@ -611,7 +613,7 @@ LEFT JOIN civicrm_option_group aog ON aog.name='activity_type'
       $caseActivityIDColumn = 'case_recent_activity_id';
     }
 
-    //validate access for all cases.
+    // validate access for all cases.
     if ($allCases && !CRM_Core_Permission::check('access all cases and activities')) {
       $allCases = FALSE;
     }
@@ -619,7 +621,7 @@ LEFT JOIN civicrm_option_group aog ON aog.name='activity_type'
     $whereClauses = array('civicrm_case.is_deleted = 0 AND civicrm_contact.is_deleted <> 1');
 
     if (!$allCases) {
-      $whereClauses[] .= " case_relationship.contact_id_b = {$userID} ";
+      $whereClauses[] .= " case_relationship.contact_id_b = {$userID} AND case_relationship.is_active ";
     }
     if (empty($params['status_id']) && ($type == 'upcoming' || $type == 'any')) {
       $whereClauses[] = " civicrm_case.status_id != " . CRM_Core_PseudoConstant::getKey('CRM_Case_BAO_Case', 'case_status_id', 'Closed');
@@ -632,7 +634,7 @@ LEFT JOIN civicrm_option_group aog ON aog.name='activity_type'
     }
     $condition = implode(' AND ', $whereClauses);
 
-    $totalCount = CRM_Core_DAO::singleValueQuery(self::getCaseActivityCountQuery($type, $userID, $condition));
+    Civi::$statics[__CLASS__]['totalCount'] = $totalCount = CRM_Core_DAO::singleValueQuery(self::getCaseActivityCountQuery($type, $userID, $condition));
     if ($getCount) {
       return $totalCount;
     }
@@ -724,7 +726,7 @@ LEFT JOIN civicrm_option_group aog ON aog.name='activity_type'
             );
           }
         }
-        if (self::checkPermission($actId, 'edit', $case['activity_type_id'], $userID)) {
+        if (isset($case['activity_type_id']) && self::checkPermission($actId, 'edit', $case['activity_type_id'], $userID)) {
           $casesList[$key]['date'] .= sprintf('<a class="action-item crm-hover-button" href="%s" title="%s"><i class="crm-i fa-pencil"></i></a>',
             CRM_Utils_System::url('civicrm/case/activity', array('reset' => 1, 'cid' => $case['contact_id'], 'caseid' => $case['case_id'], 'action' => 'update', 'id' => $actId)),
             ts('Edit activity')
@@ -794,7 +796,7 @@ LEFT JOIN civicrm_option_group aog ON aog.name='activity_type'
     else {
       $all = 0;
       $case_owner = 2;
-      $myCaseWhereClause = " AND case_relationship.contact_id_b = {$userID}";
+      $myCaseWhereClause = " AND case_relationship.contact_id_b = {$userID} AND case_relationship.is_active ";
       $myGroupByClause = " GROUP BY CONCAT(case_relationship.case_id,'-',case_relationship.contact_id_b)";
     }
     $myGroupByClause .= ", case_status.label, status_id, case_type_id";
@@ -810,7 +812,7 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
  LEFT JOIN civicrm_option_value case_status ON ( civicrm_case.status_id = case_status.value
  AND option_group_case_status.id = case_status.option_group_id )
  LEFT JOIN civicrm_relationship case_relationship ON ( case_relationship.case_id  = civicrm_case.id
- AND case_relationship.contact_id_b = {$userID})
+ AND case_relationship.contact_id_b = {$userID} AND case_relationship.is_active )
  WHERE is_deleted = 0 AND cc.contact_id IN (SELECT id FROM civicrm_contact WHERE is_deleted <> 1)
 {$myCaseWhereClause} {$myGroupByClause}";
 
@@ -859,7 +861,7 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
             IF(rel.contact_id_a = %1, "a_b", "b_a") as relationship_direction
       FROM  civicrm_relationship rel
  INNER JOIN  civicrm_relationship_type ON rel.relationship_type_id = civicrm_relationship_type.id
- INNER JOIN  civicrm_contact con ON ((con.id <> %1 AND con.id IN (rel.contact_id_a, rel.contact_id_b)) OR (con.id = %1 AND rel.contact_id_b = rel.contact_id_a AND rel.contact_id_a = %1))
+ INNER JOIN  civicrm_contact con ON ((con.id <> %1 AND con.id IN (rel.contact_id_a, rel.contact_id_b)) OR (con.id = %1 AND rel.contact_id_b = rel.contact_id_a AND rel.contact_id_a = %1 AND rel.is_active))
  LEFT JOIN  civicrm_phone ON (civicrm_phone.contact_id = con.id AND civicrm_phone.is_primary = 1)
  LEFT JOIN  civicrm_email ON (civicrm_email.contact_id = con.id AND civicrm_email.is_primary = 1)
      WHERE  (rel.contact_id_a = %1 OR rel.contact_id_b = %1) AND rel.case_id = %2
@@ -894,7 +896,6 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
       $values[$rid]['relationship_direction'] = $dao->relationship_direction;
     }
 
-    $dao->free();
     return $values;
   }
 
@@ -1060,7 +1061,6 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
     $caseCount = CRM_Core_DAO::singleValueQuery('SELECT FOUND_ROWS()');
 
     $activityTypes = CRM_Case_PseudoConstant::caseActivityType(FALSE, TRUE);
-    $activityStatuses = CRM_Core_PseudoConstant::activityStatus();
 
     $url = CRM_Utils_System::url("civicrm/case/activity",
       "reset=1&cid={$contactID}&caseid={$caseID}", FALSE, NULL, FALSE
@@ -1095,7 +1095,6 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
     $caseActivities = array();
 
     while ($dao->fetch()) {
-      $caseActivity = array();
       $caseActivityId = $dao->id;
 
       $allowView = self::checkPermission($caseActivityId, 'view', $dao->activity_type_id, $userID);
@@ -1174,8 +1173,8 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
         }
       }
 
-      //Activity Status
-      $caseActivities[$caseActivityId]['status_id'] = $activityStatuses[$dao->status];
+      // Activity Status Label for Case activities list
+      $caseActivities[$caseActivityId]['status_id'] = CRM_Core_PseudoConstant::getLabel('CRM_Activity_BAO_Activity', 'activity_status_id', $dao->status);
 
       // FIXME: Why are we not using CRM_Core_Action for these links? This is too much manual work and likely to get out-of-sync with core markup.
       $url = "";
@@ -1218,7 +1217,6 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
 
       $caseActivities[$caseActivityId]['links'] = $url;
     }
-    $dao->free();
 
     $caseActivitiesDT = array();
     $caseActivitiesDT['data'] = array_values($caseActivities);
@@ -1318,7 +1316,6 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
         $values[] = $details;
       }
     }
-    $dao->free();
 
     return $values;
   }
@@ -1343,9 +1340,9 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
     }
 
     $tplParams = $activityInfo = array();
-    //if its a case activity
+    $activityTypeId = CRM_Core_DAO::getFieldValue('CRM_Activity_DAO_Activity', $activityId, 'activity_type_id');
+    // If it's a case activity
     if ($caseId) {
-      $activityTypeId = CRM_Core_DAO::getFieldValue('CRM_Activity_DAO_Activity', $activityId, 'activity_type_id');
       $nonCaseActivityTypes = CRM_Core_PseudoConstant::activityType();
       if (!empty($nonCaseActivityTypes[$activityTypeId])) {
         $anyActivity = TRUE;
@@ -1369,6 +1366,7 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
     if ($caseId) {
       $activityInfo['fields'][] = array('label' => 'Case ID', 'type' => 'String', 'value' => $caseId);
     }
+    $tplParams['activityTypeName'] = CRM_Core_PseudoConstant::getLabel('CRM_Activity_DAO_Activity', 'activity_type_id', $activityTypeId);
     $tplParams['activity'] = $activityInfo;
     foreach ($tplParams['activity']['fields'] as $k => $val) {
       if (CRM_Utils_Array::value('label', $val) == ts('Subject')) {
@@ -1427,7 +1425,7 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
         )
       );
 
-      $activityParams['subject'] = $activitySubject . ' - copy sent to ' . $displayName;
+      $activityParams['subject'] = ts('%1 - copy sent to %2', [1 => $activitySubject, 2 => $displayName]);
       $activityParams['details'] = $message;
 
       if (!empty($result[$info['contact_id']])) {
@@ -1802,7 +1800,6 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
       $values[$dao->id]['id'] = $dao->id;
       $values[$dao->id]['activity_date'] = $dao->activity_date;
     }
-    $dao->free();
     return $values;
   }
 
@@ -1918,7 +1915,7 @@ SELECT case_status.label AS case_status, status_id, civicrm_case_type.title AS c
 SELECT civicrm_contact.id as casemanager_id,
        civicrm_contact.sort_name as casemanager
  FROM civicrm_contact
- LEFT JOIN civicrm_relationship ON (civicrm_relationship.contact_id_b = civicrm_contact.id AND civicrm_relationship.relationship_type_id = %1)
+ LEFT JOIN civicrm_relationship ON (civicrm_relationship.contact_id_b = civicrm_contact.id AND civicrm_relationship.relationship_type_id = %1) AND civicrm_relationship.is_active
  LEFT JOIN civicrm_case ON civicrm_case.id = civicrm_relationship.case_id
  WHERE civicrm_case.id = %2 AND is_active = 1";
 
@@ -1978,9 +1975,7 @@ SELECT civicrm_contact.id as casemanager_id,
       return array();
     }
 
-    $linkActType = array_search('Link Cases',
-      CRM_Core_PseudoConstant::activityType(TRUE, TRUE, FALSE, 'name')
-    );
+    $linkActType = CRM_Core_PseudoConstant::getKey('CRM_Activity_BAO_Activity', 'activity_type_id', 'Link Cases');
     if (!$linkActType) {
       return array();
     }
@@ -2007,7 +2002,6 @@ SELECT civicrm_contact.id as casemanager_id,
     while ($dao->fetch()) {
       $relatedCaseIds[$dao->case_id] = $dao->case_id;
     }
-    $dao->free();
 
     return array_values($relatedCaseIds);
   }
@@ -2080,7 +2074,6 @@ SELECT civicrm_contact.id as casemanager_id,
         'links' => $caseView,
       );
     }
-    $dao->free();
 
     return $relatedCases;
   }
@@ -2141,8 +2134,8 @@ SELECT civicrm_contact.id as casemanager_id,
       return $mainCaseIds;
     }
 
-    $activityTypes = CRM_Core_PseudoConstant::activityType(TRUE, TRUE, FALSE, 'name');
-    $activityStatuses = CRM_Core_PseudoConstant::activityStatus('name');
+    $activityTypes = CRM_Activity_BAO_Activity::buildOptions('activity_type_id', 'validate');
+    $completedActivityStatus = CRM_Core_PseudoConstant::getKey('CRM_Activity_BAO_Activity', 'activity_status_id', 'Completed');
     $activityContacts = CRM_Activity_BAO_ActivityContact::buildOptions('record_type_id', 'validate');
     $sourceID = CRM_Utils_Array::key('Activity Source', $activityContacts);
     $assigneeID = CRM_Utils_Array::key('Activity Assignees', $activityContacts);
@@ -2198,8 +2191,6 @@ SELECT civicrm_contact.id as casemanager_id,
           }
         }
 
-        $mainCase->free();
-
         $mainCaseIds[] = $mainCaseId;
         //insert record for case contact.
         $otherCaseContact = new CRM_Case_DAO_CaseContact();
@@ -2216,9 +2207,7 @@ SELECT civicrm_contact.id as casemanager_id,
           if (!$mainCaseContact->find(TRUE)) {
             $mainCaseContact->save();
           }
-          $mainCaseContact->free();
         }
-        $otherCaseContact->free();
       }
       elseif (!$otherContactId) {
         $otherContactId = $mainContactId;
@@ -2254,7 +2243,6 @@ SELECT  id
           while ($dao->fetch()) {
             $singletonActivityIds[] = $dao->id;
           }
-          $dao->free();
         }
       }
 
@@ -2303,8 +2291,6 @@ SELECT  id
         // insert log of all activities
         CRM_Activity_BAO_Activity::logActivityAction($mainActivity);
 
-        $otherActivity->free();
-        $mainActivity->free();
         $copiedActivityIds[] = $otherActivityId;
 
         //create case activity record.
@@ -2312,7 +2298,6 @@ SELECT  id
         $mainCaseActivity->case_id = $mainCaseId;
         $mainCaseActivity->activity_id = $mainActivityId;
         $mainCaseActivity->save();
-        $mainCaseActivity->free();
 
         //migrate source activity.
         $otherSourceActivity = new CRM_Activity_DAO_ActivityContact();
@@ -2331,9 +2316,7 @@ SELECT  id
           if (!$mainActivitySource->find(TRUE)) {
             $mainActivitySource->save();
           }
-          $mainActivitySource->free();
         }
-        $otherSourceActivity->free();
 
         //migrate target activities.
         $otherTargetActivity = new CRM_Activity_DAO_ActivityContact();
@@ -2352,9 +2335,7 @@ SELECT  id
           if (!$mainActivityTarget->find(TRUE)) {
             $mainActivityTarget->save();
           }
-          $mainActivityTarget->free();
         }
-        $otherTargetActivity->free();
 
         //migrate assignee activities.
         $otherAssigneeActivity = new CRM_Activity_DAO_ActivityContact();
@@ -2373,9 +2354,7 @@ SELECT  id
           if (!$mainAssigneeActivity->find(TRUE)) {
             $mainAssigneeActivity->save();
           }
-          $mainAssigneeActivity->free();
         }
-        $otherAssigneeActivity->free();
 
         // copy custom fields and attachments
         $aparams = array(
@@ -2421,14 +2400,12 @@ SELECT  id
           if (!$mainRelationship->find(TRUE)) {
             $mainRelationship->save();
           }
-          $mainRelationship->free();
 
           //get the other relationship ids to update end date.
           if ($updateOtherRel) {
             $otherRelationshipIds[$otherRelationship->id] = $otherRelationship->id;
           }
         }
-        $otherRelationship->free();
 
         //update other relationships end dates
         if (!empty($otherRelationshipIds)) {
@@ -2490,11 +2467,11 @@ WHERE id IN (' . implode(',', $copiedActivityIds) . ')';
         }
       }
 
-      //Create merge activity record. Source for merge activity is the logged in user's contact ID ($currentUserId).
+      // Create merge activity record. Source for merge activity is the logged in user's contact ID ($currentUserId).
       $activityParams = array(
         'subject' => $mergeActSubject,
         'details' => $mergeActSubjectDetails,
-        'status_id' => array_search('Completed', $activityStatuses),
+        'status_id' => $completedActivityStatus,
         'activity_type_id' => $mergeActType,
         'source_contact_id' => $currentUserId,
         'activity_date_time' => date('YmdHis'),
@@ -2505,7 +2482,6 @@ WHERE id IN (' . implode(',', $copiedActivityIds) . ')';
       if (!$mergeActivityId) {
         continue;
       }
-      $mergeActivity->free();
 
       //connect merge activity to case.
       $mergeCaseAct = array(
@@ -2740,10 +2716,7 @@ WHERE id IN (' . implode(',', $copiedActivityIds) . ')';
 
     //do further only when operation is granted.
     if ($allow) {
-      $activityTypes = CRM_Core_PseudoConstant::activityType(TRUE, TRUE, FALSE, 'name');
-
-      //get the activity type name.
-      $actTypeName = CRM_Utils_Array::value($actTypeId, $activityTypes);
+      $actTypeName = CRM_Core_PseudoConstant::getName('CRM_Activity_BAO_Activity', 'activity_type_id', $actTypeId);
 
       //do not allow multiple copy / edit action.
       $singletonNames = array(
@@ -3120,7 +3093,6 @@ WHERE id IN (' . implode(',', $copiedActivityIds) . ')';
       if (!$newRelationship->find(TRUE)) {
         $newRelationship->save();
       }
-      $newRelationship->free();
 
       // store relationship type of newly created relationship
       $relationshipTypes[] = $caseRelationships->relationship_type_id;
@@ -3280,6 +3252,30 @@ WHERE id IN (' . implode(',', $copiedActivityIds) . ')';
     }
 
     return "$name <$address>";
+  }
+
+  /**
+   * @return array
+   */
+  public static function getEntityRefFilters() {
+    $filters = [
+      [
+        'key' => 'case_id.case_type_id',
+        'value' => ts('Case Type'),
+        'entity' => 'Case',
+      ],
+      [
+        'key' => 'case_id.status_id',
+        'value' => ts('Case Status'),
+        'entity' => 'Case',
+      ],
+    ];
+    foreach (CRM_Contact_BAO_Contact::getEntityRefFilters() as $filter) {
+      $filter += ['entity' => 'Contact'];
+      $filter['key'] = 'contact_id.' . $filter['key'];
+      $filters[] = $filter;
+    }
+    return $filters;
   }
 
 }
