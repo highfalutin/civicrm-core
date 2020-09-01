@@ -44,7 +44,7 @@ switch (@$argv[2]) {
 echo "Changing version from $oldVersion to $newVersion...\n";
 
 $verName = makeVerName($newVersion);
-$phpFile = initFile("CRM/Upgrade/Incremental/php/{$verName}.php", function() use ($verName) {
+$phpFile = initFile("CRM/Upgrade/Incremental/php/{$verName}.php", function () use ($verName) {
   ob_start();
   global $camelNumber;
   $camelNumber = $verName;
@@ -53,7 +53,7 @@ $phpFile = initFile("CRM/Upgrade/Incremental/php/{$verName}.php", function() use
   return ob_get_clean();
 });
 
-$sqlFile = initFile("CRM/Upgrade/Incremental/sql/{$newVersion}.mysql.tpl", function() use ($newVersion) {
+$sqlFile = initFile("CRM/Upgrade/Incremental/sql/{$newVersion}.mysql.tpl", function () use ($newVersion) {
   return "{* file to handle db changes in $newVersion during upgrade *}\n";
 });
 
@@ -71,8 +71,12 @@ updateFile("sql/civicrm_generated.mysql", function ($content) use ($newVersion, 
   return str_replace($oldVersion, $newVersion, $content);
 });
 
+updateFile("sql/test_data_second_domain.mysql", function ($content) use ($newVersion, $oldVersion) {
+  return str_replace($oldVersion, $newVersion, $content);
+});
+
 if ($doCommit) {
-  $files = "xml/version.xml sql/civicrm_generated.mysql " . escapeshellarg($phpFile) . ' ' . escapeshellarg($sqlFile);
+  $files = "xml/version.xml sql/civicrm_generated.mysql sql/test_data_second_domain.mysql " . escapeshellarg($phpFile) . ' ' . escapeshellarg($sqlFile);
   passthru("git add $files");
   passthru("git commit $files -m " . escapeshellarg("Set version to $newVersion"));
 }

@@ -155,9 +155,6 @@ br.clear {
 #header, #content {
   width: 100%;
 }
-#header {
-  background-color: #69c;
-}
 #logo {
   vertical-align: middle;
   border: 0;
@@ -374,6 +371,11 @@ div#toolbar-box, div#toolbar-box div.m{
   display: block;
 }
 
+/* dev/core#874 the width:auto styling above causes the menubar colour picker to be squeezed */
+.crm-container input.crm-form-color {
+  width: 3.6em;
+}
+
 /* Remove Joomla subhead toolbar & whitespace border */
 	
 body.admin.com_civicrm .subhead-collapse {
@@ -391,4 +393,9 @@ body.admin.com_civicrm #crm-nav-menu-container {
 }
 body.admin.com_civicrm #content-right {
 	padding: 12px;
+}
+
+/* Make footer admin bar hide behind popup windows (CRM-15723) */
+body.ui-dialog-open #status {
+  z-index: 100 !important;
 }

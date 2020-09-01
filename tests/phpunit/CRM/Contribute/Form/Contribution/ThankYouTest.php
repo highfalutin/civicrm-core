@@ -1,27 +1,11 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 5                                                  |
- +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2019                                |
- +--------------------------------------------------------------------+
- | This file is a part of CiviCRM.                                    |
+ | Copyright CiviCRM LLC. All rights reserved.                        |
  |                                                                    |
- | CiviCRM is free software; you can copy, modify, and distribute it  |
- | under the terms of the GNU Affero General Public License           |
- | Version 3, 19 November 2007 and the CiviCRM Licensing Exception.   |
- |                                                                    |
- | CiviCRM is distributed in the hope that it will be useful, but     |
- | WITHOUT ANY WARRANTY; without even the implied warranty of         |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.               |
- | See the GNU Affero General Public License for more details.        |
- |                                                                    |
- | You should have received a copy of the GNU Affero General Public   |
- | License and the CiviCRM Licensing Exception along                  |
- | with this program; if not, contact CiviCRM LLC                     |
- | at info[AT]civicrm[DOT]org. If you have questions about the        |
- | GNU Affero General Public License or the licensing of CiviCRM,     |
- | see the CiviCRM license FAQ at http://civicrm.org/licensing        |
+ | This work is published under the GNU AGPLv3 license with some      |
+ | permitted exceptions and without any warranty. For full license    |
+ | and copyright information, see https://civicrm.org/licensing       |
  +--------------------------------------------------------------------+
  */
 
@@ -45,7 +29,7 @@ class CRM_Contribute_Form_Contribution_ThankYouTest extends CiviUnitTestCase {
    * Test that correct contribution status is fetched for both live and test contributions.
    */
   public function testLiveAndTestContributionStatus() {
-    $paymentProcessorID = $this->paymentProcessorCreate(array('payment_processor_type_id' => 'Dummy'));
+    $paymentProcessorID = $this->paymentProcessorCreate(['payment_processor_type_id' => 'Dummy']);
 
     $form = $this->getThankYouFormWithContribution($paymentProcessorID, FALSE, FALSE);
     $form->buildQuickForm();
@@ -83,10 +67,12 @@ class CRM_Contribute_Form_Contribution_ThankYouTest extends CiviUnitTestCase {
   private function getThankYouFormWithContribution($paymentProcessorID, $withPendingContribution = FALSE, $isTestContribution = FALSE) {
     $pageContribution = $this->getPageContribution((($withPendingContribution) ? 2 : 1), $isTestContribution);
     $form = $this->getThankYouForm();
-    $form->_lineItem = array();
+    $form->_lineItem = [];
+    $form->_bltID = 5;
 
     $form->_params['contributionID'] = $pageContribution['contribution_id'];
     $form->_params['invoiceID'] = $pageContribution['invoice_id'];
+    $form->_params['email-5'] = 'demo@example.com';
     $form->_params['payment_processor_id'] = $paymentProcessorID;
     if ($isTestContribution) {
       $form->_mode = 'test';
@@ -106,17 +92,17 @@ class CRM_Contribute_Form_Contribution_ThankYouTest extends CiviUnitTestCase {
     $individualId = $this->individualCreate();
     $invoiceId = rand(100000, 999999);
 
-    $contributionId = $this->contributionCreate(array(
+    $contributionId = $this->contributionCreate([
       'contact_id'             => $individualId,
       'invoice_id'             => $invoiceId,
       'contribution_status_id' => $contributionStatus,
       'is_test'                => ($isTest) ? 1 : 0,
-    ));
+    ]);
 
-    return array(
+    return [
       'contribution_id' => $contributionId,
       'invoice_id'      => $invoiceId,
-    );
+    ];
   }
 
   /**

@@ -1,37 +1,22 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 5                                                  |
- +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2019                                |
- +--------------------------------------------------------------------+
- | This file is a part of CiviCRM.                                    |
+ | Copyright CiviCRM LLC. All rights reserved.                        |
  |                                                                    |
- | CiviCRM is free software; you can copy, modify, and distribute it  |
- | under the terms of the GNU Affero General Public License           |
- | Version 3, 19 November 2007 and the CiviCRM Licensing Exception.   |
- |                                                                    |
- | CiviCRM is distributed in the hope that it will be useful, but     |
- | WITHOUT ANY WARRANTY; without even the implied warranty of         |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.               |
- | See the GNU Affero General Public License for more details.        |
- |                                                                    |
- | You should have received a copy of the GNU Affero General Public   |
- | License and the CiviCRM Licensing Exception along                  |
- | with this program; if not, contact CiviCRM LLC                     |
- | at info[AT]civicrm[DOT]org. If you have questions about the        |
- | GNU Affero General Public License or the licensing of CiviCRM,     |
- | see the CiviCRM license FAQ at http://civicrm.org/licensing        |
+ | This work is published under the GNU AGPLv3 license with some      |
+ | permitted exceptions and without any warranty. For full license    |
+ | and copyright information, see https://civicrm.org/licensing       |
  +--------------------------------------------------------------------+
  */
 
 
 use Dompdf\Dompdf;
 use Dompdf\Options;
+
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2019
+ * @copyright CiviCRM LLC https://civicrm.org/licensing
  */
 class CRM_Utils_PDF_Utils {
 
@@ -53,7 +38,7 @@ class CRM_Utils_PDF_Utils {
       $pages = &$text;
     }
     else {
-      $pages = array($text);
+      $pages = [$text];
     }
     // Get PDF Page Format
     $format = CRM_Core_BAO_PdfFormat::getDefaultValues();
@@ -69,7 +54,7 @@ class CRM_Utils_PDF_Utils {
     $paper_width = self::convertMetric($paperSize['width'], $paperSize['metric'], 'pt');
     $paper_height = self::convertMetric($paperSize['height'], $paperSize['metric'], 'pt');
     // dompdf requires dimensions in points
-    $paper_size = array(0, 0, $paper_width, $paper_height);
+    $paper_size = [0, 0, $paper_width, $paper_height];
     $orientation = CRM_Core_BAO_PdfFormat::getValue('orientation', $format);
     $metric = CRM_Core_BAO_PdfFormat::getValue('metric', $format);
     $t = CRM_Core_BAO_PdfFormat::getValue('margin_top', $format);
@@ -77,7 +62,7 @@ class CRM_Utils_PDF_Utils {
     $b = CRM_Core_BAO_PdfFormat::getValue('margin_bottom', $format);
     $l = CRM_Core_BAO_PdfFormat::getValue('margin_left', $format);
 
-    $margins = array($metric, $t, $r, $b, $l);
+    $margins = [$metric, $t, $r, $b, $l];
 
     // Add a special region for the HTML header of PDF files:
     $pdfHeaderRegion = CRM_Core_Region::instance('export-document-header', FALSE);
@@ -95,21 +80,20 @@ class CRM_Utils_PDF_Utils {
     <div id=\"crm-container\">\n";
 
     // Strip <html>, <header>, and <body> tags from each page
+
     $htmlElementstoStrip = [
-      '@<head[^>]*?>.*?</head>@siu',
-      '@<script[^>]*?>.*?</script>@siu',
-      '@<body>@siu',
-      '@</body>@siu',
-      '@<html[^>]*?>@siu',
-      '@</html>@siu',
-      '@<!DOCTYPE[^>]*?>@siu',
+      '<head[^>]*?>.*?</head>',
+      '<script[^>]*?>.*?</script>',
+      '<body>',
+      '</body>',
+      '<html[^>]*?>',
+      '</html>',
+      '<!DOCTYPE[^>]*?>',
     ];
-    $htmlElementsInstead = ['', '', '', '', '', ''];
     foreach ($pages as & $page) {
-      $page = preg_replace($htmlElementstoStrip,
-        $htmlElementsInstead,
-        $page
-      );
+      foreach ($htmlElementstoStrip as $pattern) {
+        $page = mb_eregi_replace($pattern, '', $page);
+      }
     }
     // Glue the pages together
     $html .= implode("\n<div style=\"page-break-after: always\"></div>\n", $pages);
@@ -128,6 +112,7 @@ class CRM_Utils_PDF_Utils {
   /**
    * Convert html to tcpdf.
    *
+   * @deprecated
    * @param $paper_size
    * @param $orientation
    * @param $margins
@@ -137,13 +122,16 @@ class CRM_Utils_PDF_Utils {
    * @param $stationery_path
    */
   public static function _html2pdf_tcpdf($paper_size, $orientation, $margins, $html, $output, $fileName, $stationery_path) {
+    CRM_Core_Error::deprecatedFunctionWarning('CRM_Utils_PDF::_html2pdf_dompdf');
+    return self::_html2pdf_dompdf($paper_size, $orientation, $margins, $html, $output, $fileName);
     // Documentation on the TCPDF library can be found at: http://www.tcpdf.org
     // This function also uses the FPDI library documented at: http://www.setasign.com/products/fpdi/about/
     // Syntax borrowed from https://github.com/jake-mw/CDNTaxReceipts/blob/master/cdntaxreceipts.functions.inc
     require_once 'tcpdf/tcpdf.php';
-    require_once 'FPDI/fpdi.php'; // This library is only in the 'packages' area as of version 4.5
+    // This library is only in the 'packages' area as of version 4.5
+    require_once 'FPDI/fpdi.php';
 
-    $paper_size_arr = array($paper_size[2], $paper_size[3]);
+    $paper_size_arr = [$paper_size[2], $paper_size[3]];
 
     $pdf = new TCPDF($orientation, 'pt', $paper_size_arr);
     $pdf->Open();
@@ -219,7 +207,7 @@ class CRM_Utils_PDF_Utils {
    * @param string $fileName
    */
   public static function _html2pdf_wkhtmltopdf($paper_size, $orientation, $margins, $html, $output, $fileName) {
-    require_once 'packages/snappy/src/autoload.php';
+    require_once 'snappy/src/autoload.php';
     $config = CRM_Core_Config::singleton();
     $snappy = new Knp\Snappy\Pdf($config->wkhtmltopdfPath);
     $snappy->setOption("page-width", $paper_size[2] . "pt");

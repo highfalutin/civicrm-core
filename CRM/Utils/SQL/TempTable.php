@@ -1,35 +1,18 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 5                                                  |
- +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2019                                |
- +--------------------------------------------------------------------+
- | This file is a part of CiviCRM.                                    |
+ | Copyright CiviCRM LLC. All rights reserved.                        |
  |                                                                    |
- | CiviCRM is free software; you can copy, modify, and distribute it  |
- | under the terms of the GNU Affero General Public License           |
- | Version 3, 19 November 2007 and the CiviCRM Licensing Exception.   |
- |                                                                    |
- | CiviCRM is distributed in the hope that it will be useful, but     |
- | WITHOUT ANY WARRANTY; without even the implied warranty of         |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.               |
- | See the GNU Affero General Public License for more details.        |
- |                                                                    |
- | You should have received a copy of the GNU Affero General Public   |
- | License and the CiviCRM Licensing Exception along                  |
- | with this program; if not, contact CiviCRM LLC                     |
- | at info[AT]civicrm[DOT]org. If you have questions about the        |
- | GNU Affero General Public License or the licensing of CiviCRM,     |
- | see the CiviCRM license FAQ at http://civicrm.org/licensing        |
+ | This work is published under the GNU AGPLv3 license with some      |
+ | permitted exceptions and without any warranty. For full license    |
+ | and copyright information, see https://civicrm.org/licensing       |
  +--------------------------------------------------------------------+
  */
 
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2019
- *
+ * @copyright CiviCRM LLC https://civicrm.org/licensing
  * Table naming rules:
  *   - MySQL imposes a 64 char limit.
  *   - All temp tables start with "civicrm_tmp".
@@ -54,7 +37,7 @@
  *
  * Example 3: Create an empty temp table with list of columns.
  *
- * $tmpTbl = CRM_Utils_SQL_TempTable::build()->setDurable()->setUtf8()->createWithColumns('id int(10, name varchar(64)');
+ * $tmpTbl = CRM_Utils_SQL_TempTable::build()->setDurable()->createWithColumns('id int(10, name varchar(64)');
  *
  * Example 4: Drop a table that you previously created.
  *
@@ -67,10 +50,18 @@
  */
 class CRM_Utils_SQL_TempTable {
 
+  /**
+   * @deprecated
+   * The system will attempt to use the same as your other tables, and
+   * if you really need something else then use createWithColumns and
+   * specify it per-column there.
+   */
   const UTF8 = 'DEFAULT CHARACTER SET utf8 COLLATE utf8_unicode_ci';
+
   const CATEGORY_LENGTH = 12;
   const CATEGORY_REGEXP = ';^[a-zA-Z0-9]+$;';
-  const ID_LENGTH = 37; // MAX{64} - CATEGORY_LENGTH{12} - CONST_LENGHTH{15} = 37
+  // MAX{64} - CATEGORY_LENGTH{12} - CONST_LENGHTH{15} = 37
+  const ID_LENGTH = 37;
   const ID_REGEXP = ';^[a-zA-Z0-9_]+$;';
   const INNODB = 'ENGINE=InnoDB';
   const MEMORY = 'ENGINE=MEMORY';
@@ -78,7 +69,12 @@ class CRM_Utils_SQL_TempTable {
   /**
    * @var bool
    */
-  protected $durable, $utf8;
+  protected $durable;
+
+  /**
+   * @var bool
+   */
+  protected $utf8;
 
   protected $category;
 
@@ -87,6 +83,8 @@ class CRM_Utils_SQL_TempTable {
   protected $autodrop;
 
   protected $memory;
+
+  protected $createSql;
 
   /**
    * @return CRM_Utils_SQL_TempTable
@@ -97,8 +95,7 @@ class CRM_Utils_SQL_TempTable {
     $t->id = md5(uniqid('', TRUE));
     // The constant CIVICRM_TEMP_FORCE_DURABLE is for local debugging.
     $t->durable = CRM_Utils_Constant::value('CIVICRM_TEMP_FORCE_DURABLE', FALSE);
-    // @deprecated This constant is deprecated and will be removed.
-    $t->utf8 = CRM_Utils_Constant::value('CIVICRM_TEMP_FORCE_UTF8', TRUE);
+    $t->utf8 = TRUE;
     $t->autodrop = FALSE;
     $t->memory = FALSE;
     return $t;
@@ -134,11 +131,26 @@ class CRM_Utils_SQL_TempTable {
     $sql = sprintf('%s %s %s AS %s',
       $this->toSQL('CREATE'),
       $this->memory ? self::MEMORY : self::INNODB,
-      $this->utf8 ? self::UTF8 : '',
+      $this->getUtf8String(),
       ($selectQuery instanceof CRM_Utils_SQL_Select ? $selectQuery->toSQL() : $selectQuery)
     );
-    CRM_Core_DAO::executeQuery($sql, array(), TRUE, NULL, TRUE, FALSE);
+    CRM_Core_DAO::executeQuery($sql, [], TRUE, NULL, TRUE, FALSE);
+    $this->createSql = $sql;
     return $this;
+  }
+
+  /**
+   * Get the utf8 string for the table.
+   *
+   * Our tables are either utf8_unicode_ci OR utf8mb4_unicode_ci - check the contact table
+   * to see which & use the matching one. Or early adopters may have switched
+   * switched to other collations e.g. utf8mb4_0900_ai_ci (the default in mysql
+   * 8).
+   *
+   * @return string
+   */
+  public function getUtf8String() {
+    return $this->utf8 ? ('COLLATE ' . CRM_Core_BAO_SchemaHandler::getInUseCollation()) : '';
   }
 
   /**
@@ -154,9 +166,10 @@ class CRM_Utils_SQL_TempTable {
       $this->toSQL('CREATE'),
       $columns,
       $this->memory ? self::MEMORY : self::INNODB,
-      $this->utf8 ? self::UTF8 : ''
+      $this->getUtf8String()
     );
-    CRM_Core_DAO::executeQuery($sql, array(), TRUE, NULL, TRUE, FALSE);
+    CRM_Core_DAO::executeQuery($sql, [], TRUE, NULL, TRUE, FALSE);
+    $this->createSql = $sql;
     return $this;
   }
 
@@ -167,7 +180,7 @@ class CRM_Utils_SQL_TempTable {
    */
   public function drop() {
     $sql = $this->toSQL('DROP', 'IF EXISTS');
-    CRM_Core_DAO::executeQuery($sql, array(), TRUE, NULL, TRUE, FALSE);
+    CRM_Core_DAO::executeQuery($sql, [], TRUE, NULL, TRUE, FALSE);
     return $this;
   }
 
@@ -209,6 +222,13 @@ class CRM_Utils_SQL_TempTable {
   }
 
   /**
+   * @return string|NULL
+   */
+  public function getCreateSql() {
+    return $this->createSql;
+  }
+
+  /**
    * @return bool
    */
   public function isAutodrop() {
@@ -230,9 +250,11 @@ class CRM_Utils_SQL_TempTable {
   }
 
   /**
+   * @deprecated
    * @return bool
    */
   public function isUtf8() {
+    CRM_Core_Error::deprecatedFunctionWarning('your own charset/collation per column with createWithColumns if you really need latin1');
     return $this->utf8;
   }
 
@@ -252,7 +274,7 @@ class CRM_Utils_SQL_TempTable {
    */
   public function setCategory($category) {
     if ($category && !preg_match(self::CATEGORY_REGEXP, $category) || strlen($category) > self::CATEGORY_LENGTH) {
-      throw new \RuntimeException("Malformed temp table category");
+      throw new \RuntimeException("Malformed temp table category $category");
     }
     $this->category = $category;
     return $this;
@@ -302,13 +324,16 @@ class CRM_Utils_SQL_TempTable {
   /**
    * Set table collation to UTF8.
    *
-   * This would make sense as a default but cautiousness during phasing in has made it opt-in.
+   * @deprecated This method is deprecated as tables should be assumed to have
+   * UTF-8 as the default character set and collation; some other character set
+   * or collation may be specified in the column definition.
    *
    * @param bool $value
    *
    * @return $this
    */
   public function setUtf8($value = TRUE) {
+    CRM_Core_Error::deprecatedFunctionWarning('your own charset/collation per column with createWithColumns if you really need latin1');
     $this->utf8 = $value;
     return $this;
   }

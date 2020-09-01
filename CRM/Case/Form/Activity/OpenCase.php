@@ -1,34 +1,12 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 5                                                  |
- +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2019                                |
- +--------------------------------------------------------------------+
- | This file is a part of CiviCRM.                                    |
+ | Copyright CiviCRM LLC. All rights reserved.                        |
  |                                                                    |
- | CiviCRM is free software; you can copy, modify, and distribute it  |
- | under the terms of the GNU Affero General Public License           |
- | Version 3, 19 November 2007 and the CiviCRM Licensing Exception.   |
- |                                                                    |
- | CiviCRM is distributed in the hope that it will be useful, but     |
- | WITHOUT ANY WARRANTY; without even the implied warranty of         |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.               |
- | See the GNU Affero General Public License for more details.        |
- |                                                                    |
- | You should have received a copy of the GNU Affero General Public   |
- | License and the CiviCRM Licensing Exception along                  |
- | with this program; if not, contact CiviCRM LLC                     |
- | at info[AT]civicrm[DOT]org. If you have questions about the        |
- | GNU Affero General Public License or the licensing of CiviCRM,     |
- | see the CiviCRM license FAQ at http://civicrm.org/licensing        |
+ | This work is published under the GNU AGPLv3 license with some      |
+ | permitted exceptions and without any warranty. For full license    |
+ | and copyright information, see https://civicrm.org/licensing       |
  +--------------------------------------------------------------------+
- */
-
-/**
- *
- * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2019
  */
 
 /**
@@ -44,9 +22,15 @@ class CRM_Case_Form_Activity_OpenCase {
   public $_contactID;
 
   /**
+   * @var int
+   */
+  public $_caseStatusId;
+
+  /**
    * @param CRM_Case_Form_Case $form
    *
    * @throws \CRM_Core_Exception
+   * @throws \CiviCRM_API3_Exception
    */
   public static function preProcess(&$form) {
     //get multi client case configuration
@@ -91,9 +75,10 @@ class CRM_Case_Form_Activity_OpenCase {
    * @param CRM_Case_Form_Case $form
    *
    * @return array $defaults
+   * @throws \CiviCRM_API3_Exception
    */
   public static function setDefaultValues(&$form) {
-    $defaults = array();
+    $defaults = [];
     if ($form->_context == 'caseActivity') {
       return $defaults;
     }
@@ -107,7 +92,8 @@ class CRM_Case_Form_Activity_OpenCase {
     else {
       $caseStatus = CRM_Core_OptionGroup::values('case_status', FALSE, FALSE, FALSE, 'AND is_default = 1');
       if (count($caseStatus) == 1) {
-        $caseStatus = key($caseStatus); //$defaults['status_id'] = key($caseStatus);
+        //$defaults['status_id'] = key($caseStatus);
+        $caseStatus = key($caseStatus);
       }
     }
     $defaults['status_id'] = $caseStatus;
@@ -146,31 +132,34 @@ class CRM_Case_Form_Activity_OpenCase {
 
   /**
    * @param CRM_Case_Form_Case $form
+   *
+   * @throws \CiviCRM_API3_Exception
+   * @throws \Exception
    */
   public static function buildQuickForm(&$form) {
     if ($form->_context == 'caseActivity') {
       return;
     }
     if ($form->_context == 'standalone') {
-      $form->addEntityRef('client_id', ts('Client'), array(
-          'create' => TRUE,
-          'multiple' => $form->_allowMultiClient,
-        ), TRUE);
+      $form->addEntityRef('client_id', ts('Client'), [
+        'create' => TRUE,
+        'multiple' => $form->_allowMultiClient,
+      ], TRUE);
     }
 
-    $element = $form->addField('case_type_id', array(
+    $element = $form->addField('case_type_id', [
       'context' => 'create',
       'entity' => 'Case',
       'onchange' => "CRM.buildCustomData('Case', this.value);",
-    ), TRUE);
+    ], TRUE);
     if ($form->_caseTypeId) {
       $element->freeze();
     }
 
-    $csElement = $form->addField('status_id', array(
+    $csElement = $form->addField('status_id', [
       'context' => 'create',
       'entity' => 'Case',
-    ), TRUE);
+    ], TRUE);
     if ($form->_caseStatusId) {
       $csElement->freeze();
     }
@@ -185,32 +174,29 @@ class CRM_Case_Form_Activity_OpenCase {
 
     $form->add('datepicker', 'start_date', ts('Case Start Date'), [], TRUE);
 
-    $form->addField('medium_id', array('entity' => 'activity', 'context' => 'create'), TRUE);
+    $form->addField('medium_id', ['entity' => 'activity', 'context' => 'create'], TRUE);
 
     // calling this field activity_location to prevent conflict with contact location fields
     $form->add('text', 'activity_location', ts('Location'), CRM_Core_DAO::getAttribute('CRM_Activity_DAO_Activity', 'location'));
 
-    $form->add('wysiwyg', 'activity_details', ts('Details'), array('rows' => 4, 'cols' => 60), FALSE);
+    $form->add('wysiwyg', 'activity_details', ts('Details'), ['rows' => 4, 'cols' => 60], FALSE);
 
-    $form->addButtons(array(
-        array(
-          'type' => 'upload',
-          'name' => ts('Save'),
-          'isDefault' => TRUE,
-          'submitOnce' => TRUE,
-        ),
-        array(
-          'type' => 'upload',
-          'name' => ts('Save and New'),
-          'subName' => 'new',
-          'submitOnce' => TRUE,
-        ),
-        array(
-          'type' => 'cancel',
-          'name' => ts('Cancel'),
-        ),
-      )
-    );
+    $form->addButtons([
+      [
+        'type' => 'upload',
+        'name' => ts('Save'),
+        'isDefault' => TRUE,
+      ],
+      [
+        'type' => 'upload',
+        'name' => ts('Save and New'),
+        'subName' => 'new',
+      ],
+      [
+        'type' => 'cancel',
+        'name' => ts('Cancel'),
+      ],
+    ]);
   }
 
   /**
@@ -230,26 +216,22 @@ class CRM_Case_Form_Activity_OpenCase {
     }
 
     // rename activity_location param to the correct column name for activity DAO
-    $params['location'] = CRM_Utils_Array::value('activity_location', $params);
+    $params['location'] = $params['activity_location'] ?? NULL;
 
     // Add attachments
-    CRM_Core_BAO_File::formatAttachment(
-      $params,
-      $params,
-      'civicrm_activity',
-      $form->_activityId
-    );
-
+    CRM_Core_BAO_File::formatAttachment($params, $params, 'civicrm_activity', $form->_activityId);
   }
 
   /**
    * Global validation rules for the form.
    *
-   * @param $fields
-   * @param $files
+   * @param array $fields
+   *   The input form values.
+   * @param array $files
+   *   The uploaded files if any.
    * @param CRM_Case_Form_Case $form
    *
-   * @return array
+   * @return array|bool
    *   list of errors to be posted back to the form
    */
   public static function formRule($fields, $files, $form) {
@@ -257,7 +239,7 @@ class CRM_Case_Form_Activity_OpenCase {
       return TRUE;
     }
 
-    $errors = array();
+    $errors = [];
     return $errors;
   }
 
@@ -278,41 +260,38 @@ class CRM_Case_Form_Activity_OpenCase {
     $isMultiClient = $xmlProcessorProcess->getAllowMultipleCaseClients();
 
     if (!$isMultiClient && !$form->_currentlyViewedContactId) {
-      CRM_Core_Error::fatal('Required parameter missing for OpenCase - end post processing');
+      CRM_Core_Error::statusBounce('Required parameter missing for OpenCase - end post processing');
     }
 
-    if (!$form->_currentUserId ||
-      !$params['case_id'] ||
-      !$params['case_type']
-    ) {
-      CRM_Core_Error::fatal('Required parameter missing for OpenCase - end post processing');
+    if (!$form->_currentUserId || !$params['case_id'] || !$params['case_type']) {
+      CRM_Core_Error::statusBounce('Required parameter missing for OpenCase - end post processing');
     }
 
     // 1. create case-contact
     if ($isMultiClient && $form->_context == 'standalone') {
       foreach ($params['client_id'] as $cliId) {
         if (empty($cliId)) {
-          CRM_Core_Error::fatal('client_id cannot be empty');
+          CRM_Core_Error::statusBounce('client_id cannot be empty for OpenCase - end post processing');
         }
-        $contactParams = array(
+        $contactParams = [
           'case_id' => $params['case_id'],
           'contact_id' => $cliId,
-        );
+        ];
         CRM_Case_BAO_CaseContact::create($contactParams);
       }
     }
     else {
-      $contactParams = array(
+      $contactParams = [
         'case_id' => $params['case_id'],
         'contact_id' => $form->_currentlyViewedContactId,
-      );
+      ];
       CRM_Case_BAO_CaseContact::create($contactParams);
     }
 
     // 2. initiate xml processor
     $xmlProcessor = new CRM_Case_XMLProcessor_Process();
 
-    $xmlProcessorParams = array(
+    $xmlProcessorParams = [
       'clientID' => $form->_currentlyViewedContactId,
       'creatorID' => $form->_currentUserId,
       'standardTimeline' => 1,
@@ -321,11 +300,11 @@ class CRM_Case_Form_Activity_OpenCase {
       'subject' => $params['activity_subject'],
       'location' => $params['location'],
       'activity_date_time' => $params['start_date'],
-      'duration' => CRM_Utils_Array::value('duration', $params),
+      'duration' => $params['duration'] ?? NULL,
       'medium_id' => $params['medium_id'],
       'details' => $params['activity_details'],
-      'relationship_end_date' => CRM_Utils_Array::value('end_date', $params),
-    );
+      'relationship_end_date' => $params['end_date'] ?? NULL,
+    ];
 
     if (array_key_exists('custom', $params) && is_array($params['custom'])) {
       $xmlProcessorParams['custom'] = $params['custom'];

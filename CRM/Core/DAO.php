@@ -1,28 +1,12 @@
 <?php
 /*
-  +--------------------------------------------------------------------+
-  | CiviCRM version 5                                                  |
-  +--------------------------------------------------------------------+
-  | Copyright CiviCRM LLC (c) 2004-2019                                |
-  +--------------------------------------------------------------------+
-  | This file is a part of CiviCRM.                                    |
-  |                                                                    |
-  | CiviCRM is free software; you can copy, modify, and distribute it  |
-  | under the terms of the GNU Affero General Public License           |
-  | Version 3, 19 November 2007 and the CiviCRM Licensing Exception.   |
-  |                                                                    |
-  | CiviCRM is distributed in the hope that it will be useful, but     |
-  | WITHOUT ANY WARRANTY; without even the implied warranty of         |
-  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.               |
-  | See the GNU Affero General Public License for more details.        |
-  |                                                                    |
-  | You should have received a copy of the GNU Affero General Public   |
-  | License and the CiviCRM Licensing Exception along                  |
-  | with this program; if not, contact CiviCRM LLC                     |
-  | at info[AT]civicrm[DOT]org. If you have questions about the        |
-  | GNU Affero General Public License or the licensing of CiviCRM,     |
-  | see the CiviCRM license FAQ at http://civicrm.org/licensing        |
-  +--------------------------------------------------------------------+
+ +--------------------------------------------------------------------+
+ | Copyright CiviCRM LLC. All rights reserved.                        |
+ |                                                                    |
+ | This work is published under the GNU AGPLv3 license with some      |
+ | permitted exceptions and without any warranty. For full license    |
+ | and copyright information, see https://civicrm.org/licensing       |
+ +--------------------------------------------------------------------+
  */
 
 /**
@@ -31,7 +15,7 @@
  * All DAO classes should inherit from this class.
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2019
+ * @copyright CiviCRM LLC https://civicrm.org/licensing
  */
 
 if (!defined('DB_DSN_MODE')) {
@@ -59,14 +43,22 @@ class CRM_Core_DAO extends DB_DataObject {
    * @var null
    * @deprecated
    */
-  static $_nullObject = NULL;
+  public static $_nullObject = NULL;
+
+  /**
+   * Icon associated with this entity.
+   *
+   * @var string
+   */
+  public static $_icon = NULL;
+
   /**
    * @var array
    * @deprecated
    */
-  static $_nullArray = array();
+  public static $_nullArray = [];
 
-  static $_dbColumnValueCache = NULL;
+  public static $_dbColumnValueCache = NULL;
   const NOT_NULL = 1, IS_NULL = 2,
     DB_DAO_NOTNULL = 128,
     VALUE_SEPARATOR = "",
@@ -101,20 +93,21 @@ class CRM_Core_DAO extends DB_DataObject {
    * test objects - this prevents world regions, countries etc from being added / deleted
    * @var array
    */
-  static $_testEntitiesToSkip = array();
+  public static $_testEntitiesToSkip = [];
   /**
    * The factory class for this application.
    * @var object
    */
-  static $_factory = NULL;
+  public static $_factory = NULL;
 
-  static $_checkedSqlFunctionsExist = FALSE;
+  public static $_checkedSqlFunctionsExist = FALSE;
 
   /**
    * https://issues.civicrm.org/jira/browse/CRM-17748
    * internal variable for DAO to hold per-query settings
+   * @var array
    */
-  protected $_options = array();
+  protected $_options = [];
 
   /**
    * Class constructor.
@@ -124,6 +117,16 @@ class CRM_Core_DAO extends DB_DataObject {
   public function __construct() {
     $this->initialize();
     $this->__table = $this->getTableName();
+  }
+
+  /**
+   * Returns localized title of this entity.
+   * @return string
+   */
+  public static function getEntityTitle() {
+    $className = static::class;
+    Civi::log()->warning("$className needs to be regeneraged. Missing getEntityTitle method.", ['civi.tag' => 'deprecated']);
+    return CRM_Core_DAO_AllCoreTables::getBriefName($className);
   }
 
   public function __clone() {
@@ -158,7 +161,14 @@ class CRM_Core_DAO extends DB_DataObject {
   public static function init($dsn) {
     Civi::$statics[__CLASS__]['init'] = 1;
     $options = &PEAR::getStaticProperty('DB_DataObject', 'options');
+    $dsn = CRM_Utils_SQL::autoSwitchDSN($dsn);
     $options['database'] = $dsn;
+    $options['quote_identifiers'] = TRUE;
+    if (CRM_Utils_SQL::isSSLDSN($dsn)) {
+      // There are two different options arrays.
+      $other_options = &PEAR::getStaticProperty('DB', 'options');
+      $other_options['ssl'] = TRUE;
+    }
     if (defined('CIVICRM_DAO_DEBUG')) {
       self::DebugLevel(CIVICRM_DAO_DEBUG);
     }
@@ -170,12 +180,12 @@ class CRM_Core_DAO extends DB_DataObject {
         $currentModes[] = 'ONLY_FULL_GROUP_BY';
       }
       if (!in_array('STRICT_TRANS_TABLES', $currentModes)) {
-        $currentModes = array_merge(array('STRICT_TRANS_TABLES'), $currentModes);
+        $currentModes = array_merge(['STRICT_TRANS_TABLES'], $currentModes);
       }
-      CRM_Core_DAO::executeQuery("SET SESSION sql_mode = %1", array(1 => array(implode(',', $currentModes), 'String')));
+      CRM_Core_DAO::executeQuery("SET SESSION sql_mode = %1", [1 => [implode(',', $currentModes), 'String']]);
     }
-    CRM_Core_DAO::executeQuery('SET NAMES utf8');
-    CRM_Core_DAO::executeQuery('SET @uniqueID = %1', array(1 => array(CRM_Utils_Request::id(), 'String')));
+    CRM_Core_DAO::executeQuery('SET NAMES utf8mb4');
+    CRM_Core_DAO::executeQuery('SET @uniqueID = %1', [1 => [CRM_Utils_Request::id(), 'String']]);
   }
 
   /**
@@ -195,7 +205,7 @@ class CRM_Core_DAO extends DB_DataObject {
     if (in_array('ONLY_FULL_GROUP_BY', $currentModes) && CRM_Utils_SQL::isGroupByModeInDefault()) {
       $key = array_search('ONLY_FULL_GROUP_BY', $currentModes);
       unset($currentModes[$key]);
-      CRM_Core_DAO::executeQuery("SET SESSION sql_mode = %1", array(1 => array(implode(',', $currentModes), 'String')));
+      CRM_Core_DAO::executeQuery("SET SESSION sql_mode = %1", [1 => [implode(',', $currentModes), 'String']]);
     }
   }
 
@@ -206,7 +216,7 @@ class CRM_Core_DAO extends DB_DataObject {
     $currentModes = CRM_Utils_SQL::getSqlModes();
     if (!in_array('ONLY_FULL_GROUP_BY', $currentModes) && CRM_Utils_SQL::isGroupByModeInDefault()) {
       $currentModes[] = 'ONLY_FULL_GROUP_BY';
-      CRM_Core_DAO::executeQuery("SET SESSION sql_mode = %1", array(1 => array(implode(',', $currentModes), 'String')));
+      CRM_Core_DAO::executeQuery("SET SESSION sql_mode = %1", [1 => [implode(',', $currentModes), 'String']]);
     }
   }
 
@@ -216,8 +226,8 @@ class CRM_Core_DAO extends DB_DataObject {
    * @param array $params
    */
   protected function assignTestFK($fieldName, $fieldDef, $params) {
-    $required = CRM_Utils_Array::value('required', $fieldDef);
-    $FKClassName = CRM_Utils_Array::value('FKClassName', $fieldDef);
+    $required = $fieldDef['required'] ?? NULL;
+    $FKClassName = $fieldDef['FKClassName'] ?? NULL;
     $dbName = $fieldDef['name'];
     $daoName = str_replace('_BAO_', '_DAO_', get_class($this));
 
@@ -233,26 +243,22 @@ class CRM_Core_DAO extends DB_DataObject {
       if ($fkDAO->find(TRUE)) {
         $this->$dbName = $fkDAO->id;
       }
-      $fkDAO->free();
     }
 
     elseif (in_array($FKClassName, CRM_Core_DAO::$_testEntitiesToSkip)) {
       $depObject = new $FKClassName();
       $depObject->find(TRUE);
       $this->$dbName = $depObject->id;
-      $depObject->free();
     }
     elseif ($daoName == 'CRM_Member_DAO_MembershipType' && $fieldName == 'member_of_contact_id') {
       // FIXME: the fields() metadata is not specific enough
-      $depObject = CRM_Core_DAO::createTestObject($FKClassName, array('contact_type' => 'Organization'));
+      $depObject = CRM_Core_DAO::createTestObject($FKClassName, ['contact_type' => 'Organization']);
       $this->$dbName = $depObject->id;
-      $depObject->free();
     }
     else {
       //if it is required we need to generate the dependency object first
       $depObject = CRM_Core_DAO::createTestObject($FKClassName, CRM_Utils_Array::value($dbName, $params, 1));
       $this->$dbName = $depObject->id;
-      $depObject->free();
     }
   }
 
@@ -263,6 +269,8 @@ class CRM_Core_DAO extends DB_DataObject {
    * @param array $fieldDef
    * @param int $counter
    *   The globally-unique ID of the test object.
+   *
+   * @throws \CRM_Core_Exception
    */
   protected function assignTestValue($fieldName, &$fieldDef, $counter) {
     $dbName = $fieldDef['name'];
@@ -323,9 +331,8 @@ class CRM_Core_DAO extends DB_DataObject {
           break;
 
         case CRM_Utils_Type::T_TIME:
-          CRM_Core_Error::fatal("T_TIME shouldn't be used.");
-          //$object->$dbName='000000';
-          //break;
+          throw new CRM_Core_Exception('T_TIME shouldn\'t be used.');
+
         case CRM_Utils_Type::T_CCNUM:
           $this->$dbName = '4111 1111 1111 1111';
           break;
@@ -360,7 +367,7 @@ class CRM_Core_DAO extends DB_DataObject {
           }
           else {
             $this->$dbName = $dbName . '_' . $counter;
-            $maxlength = CRM_Utils_Array::value('maxlength', $fieldDef);
+            $maxlength = $fieldDef['maxlength'] ?? NULL;
             if ($maxlength > 0 && strlen($this->$dbName) > $maxlength) {
               $this->$dbName = substr($this->$dbName, 0, $fieldDef['maxlength']);
             }
@@ -385,7 +392,7 @@ class CRM_Core_DAO extends DB_DataObject {
     /**
      * reset the various DB_DAO structures manually
      */
-    $this->_query = array();
+    $this->_query = [];
     $this->whereAdd();
     $this->selectAdd();
     $this->joinAdd();
@@ -487,7 +494,7 @@ class CRM_Core_DAO extends DB_DataObject {
   public function keys() {
     static $keys;
     if (!isset($keys)) {
-      $keys = array('id');
+      $keys = ['id'];
     }
     return $keys;
   }
@@ -502,7 +509,7 @@ class CRM_Core_DAO extends DB_DataObject {
   public function sequenceKey() {
     static $sequenceKeys;
     if (!isset($sequenceKeys)) {
-      $sequenceKeys = array('id', TRUE);
+      $sequenceKeys = ['id', TRUE];
     }
     return $sequenceKeys;
   }
@@ -515,7 +522,7 @@ class CRM_Core_DAO extends DB_DataObject {
    *   Array of CRM_Core_Reference_Interface
    */
   public static function getReferenceColumns() {
-    return array();
+    return [];
   }
 
   /**
@@ -530,6 +537,44 @@ class CRM_Core_DAO extends DB_DataObject {
   }
 
   /**
+   * Returns all usable fields, indexed by name.
+   *
+   * This function differs from fields() in that it indexes by name rather than unique_name.
+   *
+   * It excludes fields not added yet by pending upgrades.
+   * This avoids problems with trying to SELECT a field that exists in code but has not yet been added to the db.
+   *
+   * @param bool $checkPermissions
+   *   Filter by field permissions.
+   * @return array
+   */
+  public static function getSupportedFields($checkPermissions = FALSE) {
+    $fields = array_column((array) static::fields(), NULL, 'name');
+
+    // Exclude fields yet not added by pending upgrades
+    $dbVer = \CRM_Core_BAO_Domain::version();
+    $daoExt = defined(static::class . '::EXT') ? constant(static::class . '::EXT') : NULL;
+    if ($fields && $daoExt === 'civicrm' && version_compare($dbVer, \CRM_Utils_System::version()) < 0) {
+      $fields = array_filter($fields, function($field) use ($dbVer) {
+        $add = $field['add'] ?? '1.0.0';
+        if (substr_count($add, '.') < 2) {
+          $add .= '.alpha1';
+        }
+        return version_compare($dbVer, $add, '>=');
+      });
+    }
+
+    // Exclude fields the user does not have permission for
+    if ($checkPermissions) {
+      $fields = array_filter($fields, function($field) {
+        return empty($field['permission']) || CRM_Core_Permission::check($field['permission']);
+      });
+    }
+
+    return $fields;
+  }
+
+  /**
    * Get/set an associative array of table columns
    *
    * @return array
@@ -538,7 +583,7 @@ class CRM_Core_DAO extends DB_DataObject {
   public function table() {
     $fields = $this->fields();
 
-    $table = array();
+    $table = [];
     if ($fields) {
       foreach ($fields as $name => $value) {
         $table[$value['name']] = $value['type'];
@@ -560,19 +605,30 @@ class CRM_Core_DAO extends DB_DataObject {
    */
   public function save($hook = TRUE) {
     if (!empty($this->id)) {
-      $this->update();
+      if ($hook) {
+        $preEvent = new \Civi\Core\DAO\Event\PreUpdate($this);
+        \Civi::dispatcher()->dispatch("civi.dao.preUpdate", $preEvent);
+      }
+
+      $result = $this->update();
 
       if ($hook) {
-        $event = new \Civi\Core\DAO\Event\PostUpdate($this);
-        \Civi::service('dispatcher')->dispatch("civi.dao.postUpdate", $event);
+        $event = new \Civi\Core\DAO\Event\PostUpdate($this, $result);
+        \Civi::dispatcher()->dispatch("civi.dao.postUpdate", $event);
       }
+      $this->clearDbColumnValueCache();
     }
     else {
-      $this->insert();
+      if ($hook) {
+        $preEvent = new \Civi\Core\DAO\Event\PreUpdate($this);
+        \Civi::dispatcher()->dispatch("civi.dao.preInsert", $preEvent);
+      }
+
+      $result = $this->insert();
 
       if ($hook) {
-        $event = new \Civi\Core\DAO\Event\PostUpdate($this);
-        \Civi::service('dispatcher')->dispatch("civi.dao.postInsert", $event);
+        $event = new \Civi\Core\DAO\Event\PostUpdate($this, $result);
+        \Civi::dispatcher()->dispatch("civi.dao.postInsert", $event);
       }
     }
     $this->free();
@@ -611,13 +667,15 @@ class CRM_Core_DAO extends DB_DataObject {
    */
   public function delete($useWhere = FALSE) {
     $preEvent = new \Civi\Core\DAO\Event\PreDelete($this);
-    \Civi::service('dispatcher')->dispatch("civi.dao.preDelete", $preEvent);
+    \Civi::dispatcher()->dispatch("civi.dao.preDelete", $preEvent);
 
     $result = parent::delete($useWhere);
 
     $event = new \Civi\Core\DAO\Event\PostDelete($this, $result);
-    \Civi::service('dispatcher')->dispatch("civi.dao.postDelete", $event);
+    \Civi::dispatcher()->dispatch("civi.dao.postDelete", $event);
     $this->free();
+
+    $this->clearDbColumnValueCache();
 
     return $result;
   }
@@ -655,28 +713,21 @@ class CRM_Core_DAO extends DB_DataObject {
    * that belong to this object and initialize the object with said values
    *
    * @param array $params
-   *   (reference ) associative array of name/value pairs.
-   * @param bool $serializeArrays
-   *   Should arrays that are passed in be serialised according to the metadata.
-   *   Eventually this should be always true / gone, but in the interests of caution
-   *   it is being grandfathered in. In general an array is not valid on the DAO
-   *   but there may be instances where this function is called & then some handling
-   *   takes place on the would-be array.
+   *   Array of name/value pairs to save.
    *
    * @return bool
    *   Did we copy all null values into the object
    */
-  public function copyValues(&$params, $serializeArrays = FALSE) {
-    $fields = $this->fields();
+  public function copyValues($params) {
     $allNull = TRUE;
-    foreach ($fields as $name => $value) {
-      $dbName = $value['name'];
+    foreach ($this->fields() as $uniqueName => $field) {
+      $dbName = $field['name'];
       if (array_key_exists($dbName, $params)) {
-        $pValue = $params[$dbName];
+        $value = $params[$dbName];
         $exists = TRUE;
       }
-      elseif (array_key_exists($name, $params)) {
-        $pValue = $params[$name];
+      elseif (array_key_exists($uniqueName, $params)) {
+        $value = $params[$uniqueName];
         $exists = TRUE;
       }
       else {
@@ -685,26 +736,21 @@ class CRM_Core_DAO extends DB_DataObject {
 
       // if there is no value then make the variable NULL
       if ($exists) {
-        if ($pValue === '') {
+        if ($value === '') {
           $this->$dbName = 'null';
         }
-        elseif ($serializeArrays && is_array($pValue) && !empty($value['serialize'])) {
-          $this->$dbName = CRM_Core_DAO::serializeField($pValue, $value['serialize']);
+        elseif (is_array($value) && !empty($field['serialize'])) {
+          $this->$dbName = CRM_Core_DAO::serializeField($value, $field['serialize']);
           $allNull = FALSE;
         }
         else {
-          if (!$serializeArrays && is_array($pValue) && !empty($value['serialize'])) {
-            Civi::log()->warning(ts('use copyParams to serialize arrays (' . __CLASS__ . '.' . $name . ')'), ['civi.tag' => 'deprecated']);
-          }
-          $maxLength = CRM_Utils_Array::value('maxlength', $value);
-          if (!is_array($pValue) && $maxLength && mb_strlen($pValue) > $maxLength
-            && empty($value['pseudoconstant'])
-          ) {
-            Civi::log()->warning(ts('A string for field $dbName has been truncated. The original string was %1', [CRM_Utils_Type::escape($pValue, 'String')]));
+          $maxLength = $field['maxlength'] ?? NULL;
+          if (!is_array($value) && $maxLength && mb_strlen($value) > $maxLength && empty($field['pseudoconstant'])) {
+            Civi::log()->warning(ts('A string for field $dbName has been truncated. The original string was %1', [CRM_Utils_Type::escape($value, 'String')]));
             // The string is too long - what to do what to do? Well losing data is generally bad so lets' truncate
-            $pValue = CRM_Utils_String::ellipsify($pValue, $maxLength);
+            $value = CRM_Utils_String::ellipsify($value, $maxLength);
           }
-          $this->$dbName = $pValue;
+          $this->$dbName = $value;
           $allNull = FALSE;
         }
       }
@@ -747,10 +793,10 @@ class CRM_Core_DAO extends DB_DataObject {
   public static function makeAttribute($field) {
     if ($field) {
       if (CRM_Utils_Array::value('type', $field) == CRM_Utils_Type::T_STRING) {
-        $maxLength = CRM_Utils_Array::value('maxlength', $field);
-        $size = CRM_Utils_Array::value('size', $field);
+        $maxLength = $field['maxlength'] ?? NULL;
+        $size = $field['size'] ?? NULL;
         if ($maxLength || $size) {
-          $attributes = array();
+          $attributes = [];
           if ($maxLength) {
             $attributes['maxlength'] = $maxLength;
           }
@@ -761,16 +807,16 @@ class CRM_Core_DAO extends DB_DataObject {
         }
       }
       elseif (CRM_Utils_Array::value('type', $field) == CRM_Utils_Type::T_TEXT) {
-        $rows = CRM_Utils_Array::value('rows', $field);
+        $rows = $field['rows'] ?? NULL;
         if (!isset($rows)) {
           $rows = 2;
         }
-        $cols = CRM_Utils_Array::value('cols', $field);
+        $cols = $field['cols'] ?? NULL;
         if (!isset($cols)) {
           $cols = 80;
         }
 
-        $attributes = array();
+        $attributes = [];
         $attributes['rows'] = $rows;
         $attributes['cols'] = $cols;
         return $attributes;
@@ -801,11 +847,11 @@ class CRM_Core_DAO extends DB_DataObject {
     $object = new $class();
     $fields = $object->fields();
     if ($fieldName != NULL) {
-      $field = CRM_Utils_Array::value($fieldName, $fields);
+      $field = $fields[$fieldName] ?? NULL;
       return self::makeAttribute($field);
     }
     else {
-      $attributes = array();
+      $attributes = [];
       foreach ($fields as $name => $field) {
         $attribute = self::makeAttribute($field);
         if ($attribute) {
@@ -818,6 +864,62 @@ class CRM_Core_DAO extends DB_DataObject {
       }
     }
     return NULL;
+  }
+
+  /**
+   * Create or update a record from supplied params.
+   *
+   * If 'id' is supplied, an existing record will be updated
+   * Otherwise a new record will be created.
+   *
+   * @param array $record
+   * @return CRM_Core_DAO
+   * @throws CRM_Core_Exception
+   */
+  public static function writeRecord(array $record) {
+    $hook = empty($record['id']) ? 'create' : 'edit';
+    $className = CRM_Core_DAO_AllCoreTables::getCanonicalClassName(static::class);
+    if ($className === 'CRM_Core_DAO') {
+      throw new CRM_Core_Exception('Function writeRecord must be called on a subclass of CRM_Core_DAO');
+    }
+    $entityName = CRM_Core_DAO_AllCoreTables::getBriefName($className);
+
+    \CRM_Utils_Hook::pre($hook, $entityName, $record['id'] ?? NULL, $record);
+    $instance = new $className();
+    $instance->copyValues($record);
+    $instance->save();
+    \CRM_Utils_Hook::post($hook, $entityName, $instance->id, $instance);
+
+    return $instance;
+  }
+
+  /**
+   * Delete a record from supplied params.
+   *
+   * @param array $record
+   *   'id' is required.
+   * @return CRM_Core_DAO
+   * @throws CRM_Core_Exception
+   */
+  public static function deleteRecord(array $record) {
+    $className = CRM_Core_DAO_AllCoreTables::getCanonicalClassName(static::class);
+    if ($className === 'CRM_Core_DAO') {
+      throw new CRM_Core_Exception('Function deleteRecord must be called on a subclass of CRM_Core_DAO');
+    }
+    $entityName = CRM_Core_DAO_AllCoreTables::getBriefName($className);
+    if (empty($record['id'])) {
+      throw new CRM_Core_Exception("Cannot delete {$entityName} with no id.");
+    }
+
+    CRM_Utils_Hook::pre('delete', $entityName, $record['id'], $record);
+    $instance = new $className();
+    $instance->id = $record['id'];
+    if (!$instance->delete()) {
+      throw new CRM_Core_Exception("Could not delete {$entityName} id {$record['id']}");
+    }
+    CRM_Utils_Hook::post('delete', $entityName, $record['id'], $instance);
+
+    return $instance;
   }
 
   /**
@@ -847,7 +949,7 @@ class CRM_Core_DAO extends DB_DataObject {
     }
 
     if ($object->find(TRUE)) {
-      return ($daoID && $object->id == $daoID) ? TRUE : FALSE;
+      return $daoID && $object->id == $daoID;
     }
     else {
       return TRUE;
@@ -869,6 +971,7 @@ class CRM_Core_DAO extends DB_DataObject {
    *   true if exists, else false
    */
   public static function checkFieldExists($tableName, $columnName, $i18nRewrite = TRUE) {
+    CRM_Core_Error::deprecatedFunctionWarning('CRM_Core_BAO_SchemaHandler::checkIfFieldExists');
     return CRM_Core_BAO_SchemaHandler::checkIfFieldExists($tableName, $columnName, $i18nRewrite);
   }
 
@@ -929,22 +1032,24 @@ class CRM_Core_DAO extends DB_DataObject {
    *
    * @return bool
    *   true if constraint exists, false otherwise
+   *
+   * @throws \CRM_Core_Exception
    */
   public static function checkConstraintExists($tableName, $constraint) {
-    static $show = array();
+    static $show = [];
 
     if (!array_key_exists($tableName, $show)) {
       $query = "SHOW CREATE TABLE $tableName";
-      $dao = CRM_Core_DAO::executeQuery($query);
+      $dao = CRM_Core_DAO::executeQuery($query, [], TRUE, NULL, FALSE, FALSE);
 
       if (!$dao->fetch()) {
-        CRM_Core_Error::fatal();
+        throw new CRM_Core_Exception('query failed');
       }
 
       $show[$tableName] = $dao->Create_Table;
     }
 
-    return preg_match("/\b$constraint\b/i", $show[$tableName]) ? TRUE : FALSE;
+    return (bool) preg_match("/\b$constraint\b/i", $show[$tableName]);
   }
 
   /**
@@ -952,26 +1057,26 @@ class CRM_Core_DAO extends DB_DataObject {
    *
    * @param array $tables
    *
-   * @throws Exception
+   * @throws CRM_Core_Exception
    *
    * @return bool
    *   true if CONSTRAINT keyword exists, false otherwise
    */
-  public static function schemaRequiresRebuilding($tables = array("civicrm_contact")) {
-    $show = array();
+  public static function schemaRequiresRebuilding($tables = ["civicrm_contact"]) {
+    $show = [];
     foreach ($tables as $tableName) {
       if (!array_key_exists($tableName, $show)) {
         $query = "SHOW CREATE TABLE $tableName";
-        $dao = CRM_Core_DAO::executeQuery($query);
+        $dao = CRM_Core_DAO::executeQuery($query, [], TRUE, NULL, FALSE, FALSE);
 
         if (!$dao->fetch()) {
-          CRM_Core_Error::fatal();
+          throw new CRM_Core_Exception('Show create table failed.');
         }
 
         $show[$tableName] = $dao->Create_Table;
       }
 
-      $result = preg_match("/\bCONSTRAINT\b\s/i", $show[$tableName]) ? TRUE : FALSE;
+      $result = (bool) preg_match("/\bCONSTRAINT\b\s/i", $show[$tableName]);
       if ($result == TRUE) {
         continue;
       }
@@ -991,23 +1096,25 @@ class CRM_Core_DAO extends DB_DataObject {
    *
    * @return bool
    *   true if in format, false otherwise
+   *
+   * @throws \CRM_Core_Exception
    */
   public static function checkFKConstraintInFormat($tableName, $columnName) {
-    static $show = array();
+    static $show = [];
 
     if (!array_key_exists($tableName, $show)) {
       $query = "SHOW CREATE TABLE $tableName";
       $dao = CRM_Core_DAO::executeQuery($query);
 
       if (!$dao->fetch()) {
-        CRM_Core_Error::fatal();
+        throw new CRM_Core_Exception('query failed');
       }
 
       $show[$tableName] = $dao->Create_Table;
     }
     $constraint = "`FK_{$tableName}_{$columnName}`";
     $pattern = "/\bCONSTRAINT\b\s+%s\s+\bFOREIGN\s+KEY\b\s/i";
-    return preg_match(sprintf($pattern, $constraint), $show[$tableName]) ? TRUE : FALSE;
+    return (bool) preg_match(sprintf($pattern, $constraint), $show[$tableName]);
   }
 
   /**
@@ -1044,6 +1151,23 @@ class CRM_Core_DAO extends DB_DataObject {
   }
 
   /**
+   * Checks if this DAO's table ought to exist.
+   *
+   * If there are pending DB updates, this function compares the CiviCRM version of the table to the current schema version.
+   *
+   * @return bool
+   * @throws CRM_Core_Exception
+   */
+  public static function tableHasBeenAdded() {
+    if (CRM_Utils_System::version() === CRM_Core_BAO_Domain::version()) {
+      return TRUE;
+    }
+    $daoExt = defined(static::class . '::EXT') ? constant(static::class . '::EXT') : NULL;
+    $daoVersion = defined(static::class . '::TABLE_ADDED') ? constant(static::class . '::TABLE_ADDED') : '1.0';
+    return !($daoExt === 'civicrm' && version_compare(CRM_Core_BAO_Domain::version(), $daoVersion, '<'));
+  }
+
+  /**
    * Check if there is a given table in the database.
    *
    * @param string $tableName
@@ -1056,25 +1180,33 @@ class CRM_Core_DAO extends DB_DataObject {
 SHOW TABLES
 LIKE %1
 ";
-    $params = array(1 => array($tableName, 'String'));
+    $params = [1 => [$tableName, 'String']];
 
     $dao = CRM_Core_DAO::executeQuery($query, $params);
-    $result = $dao->fetch() ? TRUE : FALSE;
-    return $result;
+    return (bool) $dao->fetch();
+  }
+
+  /**
+   * Check if a given table has data.
+   *
+   * @param string $tableName
+   * @return bool
+   *   TRUE if $tableName has at least one record.
+   */
+  public static function checkTableHasData($tableName) {
+    $c = CRM_Core_DAO::singleValueQuery(sprintf('SELECT count(*) c FROM `%s`', $tableName));
+    return $c > 0;
   }
 
   /**
    * @param $version
-   *
+   * @deprecated
    * @return bool
    */
   public function checkVersion($version) {
-    $query = "
-SELECT version
-FROM   civicrm_domain
-";
-    $dbVersion = CRM_Core_DAO::singleValueQuery($query);
-    return trim($version) == trim($dbVersion) ? TRUE : FALSE;
+    CRM_Core_Error::deprecatedFunctionWarning('CRM_Core_BAO_Domain::version');
+    $dbVersion = CRM_Core_BAO_Domain::version();
+    return trim($version) == trim($dbVersion);
   }
 
   /**
@@ -1102,8 +1234,8 @@ FROM   civicrm_domain
    *
    * @return array
    */
-  public function fetchAll() {
-    $result = array();
+  public function fetchAll($k = FALSE, $v = FALSE, $method = FALSE) {
+    $result = [];
     while ($this->fetch()) {
       $result[] = $this->toArray();
     }
@@ -1160,7 +1292,7 @@ FROM   civicrm_domain
    *   Ex: ["foo" => "The Foo Bar", "baz" => "The Baz Qux"]
    */
   public function fetchMap($keyColumn, $valueColumn) {
-    $result = array();
+    $result = [];
     while ($this->fetch()) {
       $result[$this->{$keyColumn}] = $this->{$valueColumn};
     }
@@ -1181,8 +1313,10 @@ FROM   civicrm_domain
    * @param bool $force
    *   Skip use of the cache.
    *
-   * @return string|null
+   * @return string|int|null
    *   Value of $returnColumn in the retrieved record
+   *
+   * @throws \CRM_Core_Exception
    */
   public static function getFieldValue($daoName, $searchValue, $returnColumn = 'name', $searchColumn = 'id', $force = FALSE) {
     if (
@@ -1192,15 +1326,19 @@ FROM   civicrm_domain
       // adding this here since developers forget to check for an id
       // or for the 'null' (which is a bad DAO kludge)
       // and hence we get the first value in the db
-      CRM_Core_Error::fatal();
+      throw new CRM_Core_Exception('getFieldValue failed');
     }
 
-    $cacheKey = "{$daoName}:{$searchValue}:{$returnColumn}:{$searchColumn}";
-    if (self::$_dbColumnValueCache === NULL) {
-      self::$_dbColumnValueCache = array();
+    self::$_dbColumnValueCache = self::$_dbColumnValueCache ?? [];
+
+    while (strpos($daoName, '_BAO_') !== FALSE) {
+      $daoName = get_parent_class($daoName);
     }
 
-    if (!array_key_exists($cacheKey, self::$_dbColumnValueCache) || $force) {
+    if ($force ||
+      empty(self::$_dbColumnValueCache[$daoName][$searchColumn][$searchValue]) ||
+      !array_key_exists($returnColumn, self::$_dbColumnValueCache[$daoName][$searchColumn][$searchValue])
+    ) {
       $object = new $daoName();
       $object->$searchColumn = $searchValue;
       $object->selectAdd();
@@ -1210,11 +1348,10 @@ FROM   civicrm_domain
       if ($object->find(TRUE)) {
         $result = $object->$returnColumn;
       }
-      $object->free();
 
-      self::$_dbColumnValueCache[$cacheKey] = $result;
+      self::$_dbColumnValueCache[$daoName][$searchColumn][$searchValue][$returnColumn] = $result;
     }
-    return self::$_dbColumnValueCache[$cacheKey];
+    return self::$_dbColumnValueCache[$daoName][$searchColumn][$searchValue][$returnColumn];
   }
 
   /**
@@ -1342,9 +1479,9 @@ FROM   civicrm_domain
    * @return CRM_Core_DAO
    *   Object that points to an unbuffered result set
    */
-  static public function executeUnbufferedQuery(
+  public static function executeUnbufferedQuery(
     $query,
-    $params = array(),
+    $params = [],
     $abort = TRUE,
     $daoName = NULL,
     $freeDAO = FALSE,
@@ -1360,7 +1497,7 @@ FROM   civicrm_domain
       $freeDAO,
       $i18nRewrite,
       $trapException,
-      array('result_buffering' => 0)
+      ['result_buffering' => 0]
     );
   }
 
@@ -1385,13 +1522,13 @@ FROM   civicrm_domain
    */
   public static function &executeQuery(
     $query,
-    $params = array(),
+    $params = [],
     $abort = TRUE,
     $daoName = NULL,
     $freeDAO = FALSE,
     $i18nRewrite = TRUE,
     $trapException = FALSE,
-    $options = array()
+    $options = []
   ) {
     $queryStr = self::composeQuery($query, $params, $abort);
 
@@ -1403,6 +1540,7 @@ FROM   civicrm_domain
     }
 
     if ($trapException) {
+      CRM_Core_Error::deprecatedFunctionWarning('calling functions should handle exceptions');
       $errorScope = CRM_Core_TemporaryErrorScope::ignoreException();
     }
 
@@ -1418,15 +1556,10 @@ FROM   civicrm_domain
     }
 
     if (is_a($result, 'DB_Error')) {
+      CRM_Core_Error::deprecatedFunctionWarning('calling functions should handle exceptions');
       return $result;
     }
 
-    if ($freeDAO ||
-      preg_match('/^(insert|update|delete|create|drop|replace)/i', $queryStr)
-    ) {
-      // we typically do this for insert/update/delete statements OR if explicitly asked to
-      // free the dao
-    }
     return $dao;
   }
 
@@ -1440,12 +1573,12 @@ FROM   civicrm_domain
    */
   public function isValidOption($options) {
     $isValid = FALSE;
-    $validOptions = array(
+    $validOptions = [
       'result_buffering',
       'persistent',
       'ssl',
       'portability',
-    );
+    ];
 
     if (empty($options)) {
       return $isValid;
@@ -1475,7 +1608,7 @@ FROM   civicrm_domain
    */
   public static function &singleValueQuery(
     $query,
-    $params = array(),
+    $params = [],
     $abort = TRUE,
     $i18nRewrite = TRUE
   ) {
@@ -1509,10 +1642,10 @@ FROM   civicrm_domain
    * @param bool $abort
    *
    * @return string
-   * @throws Exception
+   * @throws CRM_Core_Exception
    */
-  public static function composeQuery($query, $params, $abort = TRUE) {
-    $tr = array();
+  public static function composeQuery($query, $params = [], $abort = TRUE) {
+    $tr = [];
     foreach ($params as $key => $item) {
       if (is_numeric($key)) {
         if (CRM_Utils_Type::validate($item[0], $item[1]) !== NULL) {
@@ -1547,7 +1680,7 @@ FROM   civicrm_domain
           $tr['%' . $key] = $item[0];
         }
         elseif ($abort) {
-          CRM_Core_Error::fatal("{$item[0]} is not of type {$item[1]}");
+          throw new CRM_Core_Exception("{$item[0]} is not of type {$item[1]}");
         }
       }
     }
@@ -1598,12 +1731,16 @@ FROM   civicrm_domain
    * @param string $blockCopyOfDependencies
    *   Fields that you want to block from.
    *   getting copied
+   * @param bool $blockCopyofCustomValues
+   *   Case when you don't want to copy the custom values set in a
+   *   template as it will override/ignore the submitted custom values
    *
-   * @return CRM_Core_DAO
-   *   the newly created copy of the object
+   * @return CRM_Core_DAO|bool
+   *   the newly created copy of the object. False if none created.
    */
-  public static function &copyGeneric($daoName, $criteria, $newData = NULL, $fieldsFix = NULL, $blockCopyOfDependencies = NULL) {
+  public static function copyGeneric($daoName, $criteria, $newData = NULL, $fieldsFix = NULL, $blockCopyOfDependencies = NULL, $blockCopyofCustomValues = FALSE) {
     $object = new $daoName();
+    $newObject = FALSE;
     if (!$newData) {
       $object->id = $criteria['id'];
     }
@@ -1627,9 +1764,9 @@ FROM   civicrm_domain
 
       $fields = $object->fields();
       if (!is_array($fieldsFix)) {
-        $fieldsToPrefix = array();
-        $fieldsToSuffix = array();
-        $fieldsToReplace = array();
+        $fieldsToPrefix = [];
+        $fieldsToSuffix = [];
+        $fieldsToReplace = [];
       }
       if (!empty($fieldsFix['prefix'])) {
         $fieldsToPrefix = $fieldsFix['prefix'];
@@ -1669,13 +1806,71 @@ FROM   civicrm_domain
         }
       }
       $newObject->save();
-      if (!empty($newData['custom'])) {
-        CRM_Core_BAO_CustomValueTable::store($newData['custom'], $newObject::getTableName(), $newObject->id);
+      if (!$blockCopyofCustomValues) {
+        $newObject->copyCustomFields($object->id, $newObject->id);
       }
       CRM_Utils_Hook::post('create', CRM_Core_DAO_AllCoreTables::getBriefName($daoName), $newObject->id, $newObject);
     }
 
     return $newObject;
+  }
+
+  /**
+   * Method that copies custom fields values from an old entity to a new one.
+   *
+   * Fixes bug CRM-19302,
+   * where if a custom field of File type was present, left both events using the same file,
+   * breaking download URL's for the old event.
+   *
+   * @todo the goal here is to clean this up so that it works for any entity. Copy Generic already DOES some custom field stuff
+   * but it seems to be bypassed & perhaps less good than this (or this just duplicates it...)
+   *
+   * @param int $entityID
+   * @param int $newEntityID
+   */
+  public function copyCustomFields($entityID, $newEntityID) {
+    $entity = CRM_Core_DAO_AllCoreTables::getBriefName(get_class($this));
+    $tableName = CRM_Core_DAO_AllCoreTables::getTableForClass(get_class($this));
+    // Obtain custom values for old event
+    $customParams = $htmlType = [];
+    $customValues = CRM_Core_BAO_CustomValueTable::getEntityValues($entityID, $entity);
+
+    // If custom values present, we copy them
+    if (!empty($customValues)) {
+      // Get Field ID's and identify File type attributes, to handle file copying.
+      $fieldIds = implode(', ', array_keys($customValues));
+      $sql = "SELECT id FROM civicrm_custom_field WHERE html_type = 'File' AND id IN ( {$fieldIds} )";
+      $result = CRM_Core_DAO::executeQuery($sql);
+
+      // Build array of File type fields
+      while ($result->fetch()) {
+        $htmlType[] = $result->id;
+      }
+
+      // Build params array of custom values
+      foreach ($customValues as $field => $value) {
+        if ($value !== NULL) {
+          // Handle File type attributes
+          if (in_array($field, $htmlType)) {
+            $fileValues = CRM_Core_BAO_File::path($value, $entityID);
+            $customParams["custom_{$field}_-1"] = [
+              'name' => CRM_Utils_File::duplicate($fileValues[0]),
+              'type' => $fileValues[1],
+            ];
+          }
+          // Handle other types
+          else {
+            $customParams["custom_{$field}_-1"] = $value;
+          }
+        }
+      }
+
+      // Save Custom Fields for new Event
+      CRM_Core_BAO_CustomValueTable::postProcess($customParams, $tableName, $newEntityID, $entity);
+    }
+
+    // copy activity attachments ( if any )
+    CRM_Core_BAO_File::copyEntityFile($tableName, $entityID, $tableName, $newEntityID);
   }
 
   /**
@@ -1688,7 +1883,7 @@ FROM   civicrm_domain
    *
    * @return CRM_Core_DAO|null
    */
-  public static function cascadeUpdate($daoName, $fromId, $toId, $newData = array()) {
+  public static function cascadeUpdate($daoName, $fromId, $toId, $newData = []) {
     $object = new $daoName();
     $object->id = $fromId;
 
@@ -1734,7 +1929,7 @@ FROM   civicrm_domain
    * @return array
    */
   public static function getContactIDsFromComponent($componentIDs, $tableName, $idField = 'id') {
-    $contactIDs = array();
+    $contactIDs = [];
 
     if (empty($componentIDs)) {
       return $contactIDs;
@@ -1782,7 +1977,7 @@ SELECT contact_id
 
     $object->find();
     while ($object->fetch()) {
-      $defaults = array();
+      $defaults = [];
       self::storeValues($object, $defaults);
       $details[$object->id] = $defaults;
     }
@@ -1793,7 +1988,7 @@ SELECT contact_id
   /**
    * Drop all CiviCRM tables.
    *
-   * @throws \CRM_Exception
+   * @throws \CRM_Core_Exception
    */
   public static function dropAllTables() {
 
@@ -1828,8 +2023,8 @@ SELECT contact_id
       if (!defined('CIVICRM_DSN')) {
         // See http://php.net/manual/en/mysqli.real-escape-string.php for the
         // list of characters mysqli_real_escape_string escapes.
-        $search = array("\\", "\x00", "\n", "\r", "'", '"', "\x1a");
-        $replace = array("\\\\", "\\0", "\\n", "\\r", "\'", '\"', "\\Z");
+        $search = ["\\", "\x00", "\n", "\r", "'", '"', "\x1a"];
+        $replace = ["\\\\", "\\0", "\\n", "\\r", "\'", '\"', "\\Z"];
         return str_replace($search, $replace, $string);
       }
       $_dao = new CRM_Core_DAO();
@@ -1856,7 +2051,7 @@ SELECT contact_id
       return $default;
     }
 
-    $escapes = array_map(array($_dao, 'escape'), $strings);
+    $escapes = array_map([$_dao, 'escape'], $strings);
     return '"' . implode('","', $escapes) . '"';
   }
 
@@ -1871,7 +2066,7 @@ SELECT contact_id
     // card characters and could come in via sortByCharacter
     // note that mysql does not escape these characters
     if ($string && in_array($string,
-        array('%', '_', '%%', '_%')
+        ['%', '_', '%%', '_%']
       )
     ) {
       return '\\' . $string;
@@ -1895,7 +2090,7 @@ SELECT contact_id
    */
   public static function createTestObject(
     $daoName,
-    $params = array(),
+    $params = [],
     $numObjects = 1,
     $createOnly = FALSE
   ) {
@@ -1905,18 +2100,24 @@ SELECT contact_id
     $config->backtrace = TRUE;
 
     static $counter = 0;
-    CRM_Core_DAO::$_testEntitiesToSkip = array(
+    CRM_Core_DAO::$_testEntitiesToSkip = [
       'CRM_Core_DAO_Worldregion',
       'CRM_Core_DAO_StateProvince',
       'CRM_Core_DAO_Country',
       'CRM_Core_DAO_Domain',
       'CRM_Financial_DAO_FinancialType',
       //because valid ones exist & we use pick them due to pseudoconstant can't reliably create & delete these
-    );
+    ];
 
     // Prefer to instantiate BAO's instead of DAO's (when possible)
     // so that assignTestValue()/assignTestFK() can be overloaded.
     $baoName = str_replace('_DAO_', '_BAO_', $daoName);
+    if ($baoName === 'CRM_Financial_BAO_FinancialTrxn') {
+      // OMG OMG OMG this is so incredibly bad. The BAO is insanely named.
+      // @todo create a new class called what the BAO SHOULD be
+      // that extends BAO-crazy-name.... migrate.
+      $baoName = 'CRM_Core_BAO_FinancialTrxn';
+    }
     if (class_exists($baoName)) {
       $daoName = $baoName;
     }
@@ -1930,10 +2131,9 @@ SELECT contact_id
       $fields = $object->fields();
       foreach ($fields as $fieldName => $fieldDef) {
         $dbName = $fieldDef['name'];
-        $FKClassName = CRM_Utils_Array::value('FKClassName', $fieldDef);
-        $required = CRM_Utils_Array::value('required', $fieldDef);
+        $FKClassName = $fieldDef['FKClassName'] ?? NULL;
 
-        if (CRM_Utils_Array::value($dbName, $params) !== NULL && !is_array($params[$dbName])) {
+        if (isset($params[$dbName]) && !is_array($params[$dbName])) {
           $object->$dbName = $params[$dbName];
         }
 
@@ -1976,16 +2176,17 @@ SELECT contact_id
    * @param string $daoName
    * @param array $params
    */
-  public static function deleteTestObjects($daoName, $params = array()) {
+  public static function deleteTestObjects($daoName, $params = []) {
     //this is a test function  also backtrace is set for the test suite it sometimes unsets itself
     // so we re-set here in case
     $config = CRM_Core_Config::singleton();
     $config->backtrace = TRUE;
 
     $object = new $daoName();
-    $object->id = CRM_Utils_Array::value('id', $params);
+    $object->id = $params['id'] ?? NULL;
 
-    $deletions = array(); // array(array(0 => $daoName, 1 => $daoParams))
+    // array(array(0 => $daoName, 1 => $daoParams))
+    $deletions = [];
     if ($object->find(TRUE)) {
 
       $fields = $object->fields();
@@ -1993,8 +2194,8 @@ SELECT contact_id
 
         $dbName = $value['name'];
 
-        $FKClassName = CRM_Utils_Array::value('FKClassName', $value);
-        $required = CRM_Utils_Array::value('required', $value);
+        $FKClassName = $value['FKClassName'] ?? NULL;
+        $required = $value['required'] ?? NULL;
         if ($FKClassName != NULL
           && $object->$dbName
           && !in_array($FKClassName, CRM_Core_DAO::$_testEntitiesToSkip)
@@ -2003,7 +2204,8 @@ SELECT contact_id
           // to make this test process pass - line below makes pass for now
           && $dbName != 'member_of_contact_id'
         ) {
-          $deletions[] = array($FKClassName, array('id' => $object->$dbName)); // x
+          // x
+          $deletions[] = [$FKClassName, ['id' => $object->$dbName]];
         }
       }
     }
@@ -2043,6 +2245,7 @@ SELECT contact_id
    * @see CRM_Utils_SQL_TempTable
    */
   public static function createTempTableName($prefix = 'civicrm', $addRandomString = TRUE, $string = NULL) {
+    CRM_Core_Error::deprecatedFunctionWarning('Use CRM_Utils_SQL_TempTable interface to create temporary tables');
     $tableName = $prefix . "_temp";
 
     if ($addRandomString) {
@@ -2115,7 +2318,7 @@ SELECT contact_id
 
     if ($printDAO) {
       global $_DB_DATAOBJECT;
-      $q = array();
+      $q = [];
       foreach (array_keys($_DB_DATAOBJECT['RESULTS']) as $id) {
         $q[] = $_DB_DATAOBJECT['RESULTS'][$id]->query;
       }
@@ -2185,7 +2388,7 @@ SELECT contact_id
    * @return array<CRM_Core_Reference_Interface>
    */
   public static function createReferenceColumns($className) {
-    $result = array();
+    $result = [];
     $fields = $className::fields();
     foreach ($fields as $field) {
       if (isset($field['pseudoconstant'], $field['pseudoconstant']['optionGroupName'])) {
@@ -2210,7 +2413,7 @@ SELECT contact_id
   public function findReferences() {
     $links = self::getReferencesToTable(static::getTableName());
 
-    $occurrences = array();
+    $occurrences = [];
     foreach ($links as $refSpec) {
       /** @var $refSpec CRM_Core_Reference_Interface */
       $daoName = CRM_Core_DAO_AllCoreTables::getClassForTable($refSpec->getReferenceTable());
@@ -2239,7 +2442,7 @@ SELECT contact_id
   public function getReferenceCounts() {
     $links = self::getReferencesToTable(static::getTableName());
 
-    $counts = array();
+    $counts = [];
     foreach ($links as $refSpec) {
       /** @var $refSpec CRM_Core_Reference_Interface */
       $count = $refSpec->getReferenceCount($this);
@@ -2274,10 +2477,9 @@ SELECT contact_id
    *   foreign key reference to $tableName, and the column where the key appears.
    */
   public static function getReferencesToTable($tableName) {
-    $refsFound = array();
+    $refsFound = [];
     foreach (CRM_Core_DAO_AllCoreTables::getClasses() as $daoClassName) {
       $links = $daoClassName::getReferenceColumns();
-      $daoTableName = $daoClassName::getTableName();
 
       foreach ($links as $refSpec) {
         /** @var $refSpec CRM_Core_Reference_Interface */
@@ -2297,6 +2499,8 @@ SELECT contact_id
    *
    * Refer to CRM-17454 for information on the danger of querying the information
    * schema to derive this.
+   *
+   * @throws \CiviCRM_API3_Exception
    */
   public static function getReferencesToContactTable() {
     if (isset(\Civi::$statics[__CLASS__]) && isset(\Civi::$statics[__CLASS__]['contact_references'])) {
@@ -2310,11 +2514,29 @@ SELECT contact_id
       }
     }
     self::appendCustomTablesExtendingContacts($contactReferences);
-
-    // FixME for time being adding below line statically as no Foreign key constraint defined for table 'civicrm_entity_tag'
-    $contactReferences['civicrm_entity_tag'][] = 'entity_id';
+    self::appendCustomContactReferenceFields($contactReferences);
     \Civi::$statics[__CLASS__]['contact_references'] = $contactReferences;
     return \Civi::$statics[__CLASS__]['contact_references'];
+  }
+
+  /**
+   * Get all dynamic references to the given table.
+   *
+   * @param string $tableName
+   *
+   * @return array
+   */
+  public static function getDynamicReferencesToTable($tableName) {
+    if (!isset(\Civi::$statics[__CLASS__]['contact_references_dynamic'][$tableName])) {
+      \Civi::$statics[__CLASS__]['contact_references_dynamic'][$tableName] = [];
+      $coreReferences = CRM_Core_DAO::getReferencesToTable($tableName);
+      foreach ($coreReferences as $coreReference) {
+        if ($coreReference instanceof \CRM_Core_Reference_Dynamic) {
+          \Civi::$statics[__CLASS__]['contact_references_dynamic'][$tableName][$coreReference->getReferenceTable()][] = [$coreReference->getReferenceKey(), $coreReference->getTypeColumn()];
+        }
+      }
+    }
+    return \Civi::$statics[__CLASS__]['contact_references_dynamic'][$tableName];
   }
 
   /**
@@ -2333,7 +2555,27 @@ SELECT contact_id
     $customValueTables = CRM_Core_BAO_CustomGroup::getAllCustomGroupsByBaseEntity('Contact');
     $customValueTables->find();
     while ($customValueTables->fetch()) {
-      $cidRefs[$customValueTables->table_name] = array('entity_id');
+      $cidRefs[$customValueTables->table_name][] = 'entity_id';
+    }
+  }
+
+  /**
+   * Add custom ContactReference fields to the list of contact references
+   *
+   * This includes active and inactive fields/groups
+   *
+   * @param array $cidRefs
+   *
+   * @throws \CiviCRM_API3_Exception
+   */
+  public static function appendCustomContactReferenceFields(&$cidRefs) {
+    $fields = civicrm_api3('CustomField', 'get', [
+      'return'    => ['column_name', 'custom_group_id.table_name'],
+      'data_type' => 'ContactReference',
+      'options' => ['limit' => 0],
+    ])['values'];
+    foreach ($fields as $field) {
+      $cidRefs[$field['custom_group_id.table_name']][] = $field['column_name'];
     }
   }
 
@@ -2358,27 +2600,53 @@ SELECT contact_id
     }
   }
 
-
   /**
    * Update the fields array to also hold keys for pseudoconstant fields that relate to contained fields.
    *
    * This is relevant where we want to offer both the ID field and the label field
    * as an option, e.g. search builder.
    *
-   * It is currently limited for optionGroupName for purposes keeping the scope of the
+   * It is currently limited for optionGroupName & id+ name+ FK combos for purposes keeping the scope of the
    * change small, but is appropriate for other sorts of pseudoconstants.
    *
    * @param array $fields
    */
   public static function appendPseudoConstantsToFields(&$fields) {
-    foreach ($fields as $field) {
-      if (!empty($field['pseudoconstant']) && !empty($field['pseudoconstant']['optionGroupName'])) {
-        $fields[$field['pseudoconstant']['optionGroupName']] = array(
-          'title' => CRM_Core_BAO_OptionGroup::getTitleByName($field['pseudoconstant']['optionGroupName']),
-          'name' => $field['pseudoconstant']['optionGroupName'],
-          'data_type' => CRM_Utils_Type::T_STRING,
-          'is_pseudofield_for' => $field['name'],
-        );
+    foreach ($fields as $fieldUniqueName => $field) {
+      if (!empty($field['pseudoconstant'])) {
+        $pseudoConstant = $field['pseudoconstant'];
+        if (!empty($pseudoConstant['optionGroupName'])) {
+          $fields[$pseudoConstant['optionGroupName']] = [
+            'title' => CRM_Core_BAO_OptionGroup::getTitleByName($pseudoConstant['optionGroupName']),
+            'name' => $pseudoConstant['optionGroupName'],
+            'data_type' => CRM_Utils_Type::T_STRING,
+            'is_pseudofield_for' => $fieldUniqueName,
+          ];
+        }
+        // We restrict to id + name + FK as we are extending this a bit, but cautiously.
+        elseif (
+          !empty($field['FKClassName'])
+          && CRM_Utils_Array::value('keyColumn', $pseudoConstant) === 'id'
+          && CRM_Utils_Array::value('labelColumn', $pseudoConstant) === 'name'
+        ) {
+          $pseudoFieldName = str_replace('_' . $pseudoConstant['keyColumn'], '', $field['name']);
+          // This if is just an extra caution when adding change.
+          if (!isset($fields[$pseudoFieldName])) {
+            $daoName = $field['FKClassName'];
+            $fkFields = $daoName::fields();
+            foreach ($fkFields as $fkField) {
+              if ($fkField['name'] === $pseudoConstant['labelColumn']) {
+                $fields[$pseudoFieldName] = [
+                  'name' => $pseudoFieldName,
+                  'is_pseudofield_for' => $field['name'],
+                  'title' => $fkField['title'],
+                  'data_type' => $fkField['type'],
+                  'where' => $field['where'],
+                ];
+              }
+            }
+          }
+        }
       }
     }
   }
@@ -2393,14 +2661,16 @@ SELECT contact_id
    * @param string $context
    * @see CRM_Core_DAO::buildOptionsContext
    * @param array $props
-   *   whatever is known about this bao object.
+   *   Raw field values; whatever is known about this bao object.
+   *
+   * Note: $props can contain unsanitized input and should not be passed directly to CRM_Core_PseudoConstant::get
    *
    * @return array|bool
    */
-  public static function buildOptions($fieldName, $context = NULL, $props = array()) {
+  public static function buildOptions($fieldName, $context = NULL, $props = []) {
     // If a given bao does not override this function
     $baoName = get_called_class();
-    return CRM_Core_PseudoConstant::get($baoName, $fieldName, $props, $context);
+    return CRM_Core_PseudoConstant::get($baoName, $fieldName, [], $context);
   }
 
   /**
@@ -2414,7 +2684,7 @@ SELECT contact_id
       throw new Exception('Cannot call getOptionLabels on CRM_Core_DAO');
     }
     foreach ($fields as $field) {
-      $name = CRM_Utils_Array::value('name', $field);
+      $name = $field['name'] ?? NULL;
       if ($name && isset($this->$name)) {
         $label = CRM_Core_PseudoConstant::getLabel(get_class($this), $name, $this->$name);
         if ($label !== FALSE) {
@@ -2431,21 +2701,21 @@ SELECT contact_id
    *
    * @param string $context
    *
-   * @throws Exception
+   * @throws CRM_Core_Exception
    * @return array
    */
   public static function buildOptionsContext($context = NULL) {
-    $contexts = array(
+    $contexts = [
       'get' => "get: all options are returned, even if they are disabled; labels are translated.",
       'create' => "create: options are filtered appropriately for the object being created/updated; labels are translated.",
       'search' => "search: searchable options are returned; labels are translated.",
       'validate' => "validate: all options are returned, even if they are disabled; machine names are used in place of labels.",
       'abbreviate' => "abbreviate: enabled options are returned; labels are replaced with abbreviations.",
       'match' => "match: enabled options are returned using machine names as keys; labels are translated.",
-    );
+    ];
     // Validation: enforce uniformity of this param
     if ($context !== NULL && !isset($contexts[$context])) {
-      throw new Exception("'$context' is not a valid context for buildOptions.");
+      throw new CRM_Core_Exception("'$context' is not a valid context for buildOptions.");
     }
     return $contexts;
   }
@@ -2461,7 +2731,7 @@ SELECT contact_id
     // Support "unique names" as well as sql names
     $fieldKey = $fieldName;
     if (empty($fields[$fieldKey])) {
-      $fieldKey = CRM_Utils_Array::value($fieldName, $fieldKeys);
+      $fieldKey = $fieldKeys[$fieldName] ?? NULL;
     }
     // If neither worked then this field doesn't exist. Return false.
     if (empty($fields[$fieldKey])) {
@@ -2515,14 +2785,15 @@ SELECT contact_id
           // ternary operators
           case 'BETWEEN':
           case 'NOT BETWEEN':
-            if (empty($criteria[0]) || empty($criteria[1])) {
+            if ((empty($criteria[0]) && !in_array($criteria[0], ['0', 0]))|| (empty($criteria[1]) &&  !in_array($criteria[1], ['0', 0]))) {
               throw new Exception("invalid criteria for $operator");
             }
             if (!$returnSanitisedArray) {
               return (sprintf('%s ' . $operator . ' "%s" AND "%s"', $fieldName, CRM_Core_DAO::escapeString($criteria[0]), CRM_Core_DAO::escapeString($criteria[1])));
             }
             else {
-              return NULL;  // not yet implemented (tests required to implement)
+              // not yet implemented (tests required to implement)
+              return NULL;
             }
             break;
 
@@ -2532,10 +2803,10 @@ SELECT contact_id
             if (empty($criteria)) {
               throw new Exception("invalid criteria for $operator");
             }
-            $escapedCriteria = array_map(array(
+            $escapedCriteria = array_map([
               'CRM_Core_DAO',
               'escapeString',
-            ), $criteria);
+            ], $criteria);
             if (!$returnSanitisedArray) {
               return (sprintf('%s %s ("%s")', $fieldName, $operator, implode('", "', $escapedCriteria)));
             }
@@ -2548,7 +2819,8 @@ SELECT contact_id
               return (sprintf('%s %s "%s"', $fieldName, $operator, CRM_Core_DAO::escapeString($criteria)));
             }
             else {
-              return NULL; // not yet implemented (tests required to implement)
+              // not yet implemented (tests required to implement)
+              return NULL;
             }
         }
       }
@@ -2558,10 +2830,10 @@ SELECT contact_id
   /**
    * @see http://issues.civicrm.org/jira/browse/CRM-9150
    * support for other syntaxes is discussed in ticket but being put off for now
-   * @return array
+   * @return string[]
    */
   public static function acceptedSQLOperators() {
-    return array(
+    return [
       '=',
       '<=',
       '>=',
@@ -2577,7 +2849,7 @@ SELECT contact_id
       'NOT BETWEEN',
       'IS NOT NULL',
       'IS NULL',
-    );
+    ];
   }
 
   /**
@@ -2658,18 +2930,18 @@ SELECT contact_id
    * Generates acl clauses suitable for adding to WHERE or ON when doing an api.get for this entity
    *
    * Return format is in the form of fieldname => clauses starting with an operator. e.g.:
-   * @code
+   * ```
    *   array(
    *     'location_type_id' => array('IS NOT NULL', 'IN (1,2,3)')
    *   )
-   * @endcode
+   * ```
    *
    * Note that all array keys must be actual field names in this entity. Use subqueries to filter on other tables e.g. custom values.
    *
    * @return array
    */
   public function addSelectWhereClause() {
-    $clauses = array();
+    $clauses = [];
     $fields = $this->fields();
     foreach ($fields as $fieldName => $field) {
       // Clause for contact-related entities like Email, Relationship, etc.
@@ -2678,7 +2950,7 @@ SELECT contact_id
       }
       // Clause for an entity_table/entity_id combo
       if ($fieldName == 'entity_id' && isset($fields['entity_table'])) {
-        $relatedClauses = array();
+        $relatedClauses = [];
         $relatedEntities = $this->buildOptions('entity_table', 'get');
         foreach ((array) $relatedEntities as $table => $ent) {
           if (!empty($ent)) {
@@ -2714,7 +2986,7 @@ SELECT contact_id
     if ($tableAlias === NULL) {
       $tableAlias = $bao->tableName();
     }
-    $clauses = array();
+    $clauses = [];
     foreach ((array) $bao->addSelectWhereClause() as $field => $vals) {
       $clauses[$field] = NULL;
       if ($vals) {
@@ -2733,7 +3005,7 @@ SELECT contact_id
    * @return bool
    */
   public static function requireSafeDBName($database) {
-    $matches = array();
+    $matches = [];
     preg_match(
       "/^[\w\-]*[a-z]+[\w\-]*$/i",
       $database,
@@ -2748,9 +3020,10 @@ SELECT contact_id
   /**
    * Transform an array to a serialized string for database storage.
    *
-   * @param array|NULL $value
-   * @param $serializationType
-   * @return string|NULL
+   * @param array|null $value
+   * @param int $serializationType
+   * @return string|null
+   *
    * @throws \Exception
    */
   public static function serializeField($value, $serializationType) {
@@ -2759,7 +3032,7 @@ SELECT contact_id
     }
     switch ($serializationType) {
       case self::SERIALIZE_SEPARATOR_BOOKEND:
-        return $value === array() ? '' : CRM_Utils_Array::implodePadded($value);
+        return $value === [] ? '' : CRM_Utils_Array::implodePadded($value);
 
       case self::SERIALIZE_SEPARATOR_TRIMMED:
         return is_array($value) ? implode(self::VALUE_SEPARATOR, $value) : $value;
@@ -2783,15 +3056,16 @@ SELECT contact_id
    *
    * @param string|null $value
    * @param $serializationType
+   *
    * @return array|null
-   * @throws \Exception
+   * @throws CRM_Core_Exception
    */
   public static function unSerializeField($value, $serializationType) {
     if ($value === NULL) {
       return NULL;
     }
     if ($value === '') {
-      return array();
+      return [];
     }
     switch ($serializationType) {
       case self::SERIALIZE_SEPARATOR_BOOKEND:
@@ -2801,16 +3075,16 @@ SELECT contact_id
         return explode(self::VALUE_SEPARATOR, trim($value));
 
       case self::SERIALIZE_JSON:
-        return strlen($value) ? json_decode($value, TRUE) : array();
+        return strlen($value) ? json_decode($value, TRUE) : [];
 
       case self::SERIALIZE_PHP:
-        return strlen($value) ? unserialize($value) : array();
+        return strlen($value) ? CRM_Utils_String::unserialize($value) : [];
 
       case self::SERIALIZE_COMMA:
         return explode(',', trim(str_replace(', ', '', $value)));
 
       default:
-        throw new Exception('Unknown serialization method for field.');
+        throw new CRM_Core_Exception('Unknown serialization method for field.');
     }
   }
 
@@ -2837,6 +3111,22 @@ SELECT contact_id
     }
     CRM_Core_DAO::appendPseudoConstantsToFields($fields);
     return $fields;
+  }
+
+  /**
+   * Remove item from static cache during update/delete operations
+   */
+  private function clearDbColumnValueCache() {
+    $daoName = get_class($this);
+    while (strpos($daoName, '_BAO_') !== FALSE) {
+      $daoName = get_parent_class($daoName);
+    }
+    if (isset($this->id)) {
+      unset(self::$_dbColumnValueCache[$daoName]['id'][$this->id]);
+    }
+    if (isset($this->name)) {
+      unset(self::$_dbColumnValueCache[$daoName]['name'][$this->name]);
+    }
   }
 
 }

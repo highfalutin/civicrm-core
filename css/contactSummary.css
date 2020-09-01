@@ -49,7 +49,7 @@ div#crm-contact-thumbnail {
   min-height: 2.5em;
 }
 
-#crm-container div.crm-inline-edit .crm-edit-help {
+#crm-container div.crm-summary-block .crm-edit-help {
   display: none;
   position: absolute;
   right: 0;
@@ -224,12 +224,6 @@ div#crm-contact-thumbnail {
 #crm-record-log {
   padding: 0.8em 0.8em 0 0;
   text-align: right;
-}
-
-#crm-container .geotag {
-  padding: 2px 0 2px 20px !important;
-  background: url('../i/geotag_16.png') left center no-repeat;
-  font-size: .9em;
 }
 
 /* contact actions */

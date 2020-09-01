@@ -1,29 +1,14 @@
 <?php
 /*
-  +--------------------------------------------------------------------+
-  | CiviCRM version 5                                                  |
-  +--------------------------------------------------------------------+
-  | Copyright CiviCRM LLC (c) 2004-2019                                |
-  +--------------------------------------------------------------------+
-  | This file is a part of CiviCRM.                                    |
-  |                                                                    |
-  | CiviCRM is free software; you can copy, modify, and distribute it  |
-  | under the terms of the GNU Affero General Public License           |
-  | Version 3, 19 November 2007 and the CiviCRM Licensing Exception.   |
-  |                                                                    |
-  | CiviCRM is distributed in the hope that it will be useful, but     |
-  | WITHOUT ANY WARRANTY; without even the implied warranty of         |
-  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.               |
-  | See the GNU Affero General Public License for more details.        |
-  |                                                                    |
-  | You should have received a copy of the GNU Affero General Public   |
-  | License and the CiviCRM Licensing Exception along                  |
-  | with this program; if not, contact CiviCRM LLC                     |
-  | at info[AT]civicrm[DOT]org. If you have questions about the        |
-  | GNU Affero General Public License or the licensing of CiviCRM,     |
-  | see the CiviCRM license FAQ at http://civicrm.org/licensing        |
-  +--------------------------------------------------------------------+
+ +--------------------------------------------------------------------+
+ | Copyright CiviCRM LLC. All rights reserved.                        |
+ |                                                                    |
+ | This work is published under the GNU AGPLv3 license with some      |
+ | permitted exceptions and without any warranty. For full license    |
+ | and copyright information, see https://civicrm.org/licensing       |
+ +--------------------------------------------------------------------+
  */
+use Civi\Core\Event\GenericHookEvent;
 
 /**
  * This class facilitates the loading of resources
@@ -37,9 +22,7 @@
  * should incorporte services for aggregation, minimization, etc.
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2019
- * $Id$
- *
+ * @copyright CiviCRM LLC https://civicrm.org/licensing
  */
 class CRM_Core_Resources {
   const DEFAULT_WEIGHT = 0;
@@ -63,37 +46,63 @@ class CRM_Core_Resources {
   private $strings = NULL;
 
   /**
-   * @var array free-form data tree
+   * Settings in free-form data tree.
+   *
+   * @var array
    */
-  protected $settings = array();
-  protected $addedSettings = FALSE;
+  protected $settings = [];
 
   /**
-   * @var array of callables
+   * Setting factories.
+   *
+   * @var callable[]
    */
-  protected $settingsFactories = array();
+  protected $settingsFactories = [];
 
   /**
-   * @var array ($regionName => bool)
+   * Added core resources.
+   *
+   * Format is ($regionName => bool).
+   *
+   * @var array
    */
-  protected $addedCoreResources = array();
+  protected $addedCoreResources = [];
 
   /**
-   * @var array ($regionName => bool)
+   * Added core styles.
+   *
+   * Format is ($regionName => bool).
+   *
+   * @var array
    */
-  protected $addedCoreStyles = array();
+  protected $addedCoreStyles = [];
 
   /**
-   * @var string a value to append to JS/CSS URLs to coerce cache resets
+   * Added settings.
+   *
+   * Format is ($regionName => bool).
+   *
+   * @var array
+   */
+  protected $addedSettings = [];
+
+  /**
+   * A value to append to JS/CSS URLs to coerce cache resets.
+   *
+   * @var string
    */
   protected $cacheCode = NULL;
 
   /**
-   * @var string the name of a setting which persistently stores the cacheCode
+   * The name of a setting which persistently stores the cacheCode.
+   *
+   * @var string
    */
   protected $cacheCodeKey = NULL;
 
   /**
+   * Are ajax popup screens enabled.
+   *
    * @var bool
    */
   public $ajaxPopupsEnabled;
@@ -108,9 +117,10 @@ class CRM_Core_Resources {
    *
    * @param CRM_Core_Resources $instance
    *   New copy of the manager.
+   *
    * @return CRM_Core_Resources
    */
-  static public function singleton(CRM_Core_Resources $instance = NULL) {
+  public static function singleton(CRM_Core_Resources $instance = NULL) {
     if ($instance !== NULL) {
       self::$_singleton = $instance;
     }
@@ -157,13 +167,13 @@ class CRM_Core_Resources {
    */
   public function addPermissions($permNames) {
     $permNames = (array) $permNames;
-    $perms = array();
+    $perms = [];
     foreach ($permNames as $permName) {
       $perms[$permName] = CRM_Core_Permission::check($permName);
     }
-    return $this->addSetting(array(
+    return $this->addSetting([
       'permissions' => $perms,
-    ));
+    ]);
   }
 
   /**
@@ -184,14 +194,16 @@ class CRM_Core_Resources {
    *   - string: Load translated strings. Use a specific domain.
    *
    * @return CRM_Core_Resources
+   *
+   * @throws \CRM_Core_Exception
    */
   public function addScriptFile($ext, $file, $weight = self::DEFAULT_WEIGHT, $region = self::DEFAULT_REGION, $translate = TRUE) {
     if ($translate) {
       $domain = ($translate === TRUE) ? $ext : $translate;
       $this->addString($this->strings->get($domain, $this->getPath($ext, $file), 'text/javascript'), $domain);
     }
-    $this->resolveFileName($file, $ext);
-    return $this->addScriptUrl($this->getUrl($ext, $file, TRUE), $weight, $region);
+    $url = $this->getUrl($ext, $this->filterMinify($ext, $file), TRUE);
+    return $this->addScriptUrl($url, $weight, $region);
   }
 
   /**
@@ -205,13 +217,13 @@ class CRM_Core_Resources {
    * @return CRM_Core_Resources
    */
   public function addScriptUrl($url, $weight = self::DEFAULT_WEIGHT, $region = self::DEFAULT_REGION) {
-    CRM_Core_Region::instance($region)->add(array(
-        'name' => $url,
-        'type' => 'scriptUrl',
-        'scriptUrl' => $url,
-        'weight' => $weight,
-        'region' => $region,
-      ));
+    CRM_Core_Region::instance($region)->add([
+      'name' => $url,
+      'type' => 'scriptUrl',
+      'scriptUrl' => $url,
+      'weight' => $weight,
+      'region' => $region,
+    ]);
     return $this;
   }
 
@@ -227,13 +239,13 @@ class CRM_Core_Resources {
    * @return CRM_Core_Resources
    */
   public function addScript($code, $weight = self::DEFAULT_WEIGHT, $region = self::DEFAULT_REGION) {
-    CRM_Core_Region::instance($region)->add(array(
+    CRM_Core_Region::instance($region)->add([
         // 'name' => automatic
-        'type' => 'script',
-        'script' => $code,
-        'weight' => $weight,
-        'region' => $region,
-      ));
+      'type' => 'script',
+      'script' => $code,
+      'weight' => $weight,
+      'region' => $region,
+    ]);
     return $this;
   }
 
@@ -246,17 +258,20 @@ class CRM_Core_Resources {
    * Access var from javascript:
    * CRM.vars.myNamespace.foo // "bar"
    *
-   * @see http://wiki.civicrm.org/confluence/display/CRMDOC/Javascript+Reference
+   * @see https://docs.civicrm.org/dev/en/latest/standards/javascript/
    *
    * @param string $nameSpace
    *   Usually the name of your extension.
    * @param array $vars
+   * @param string $region
+   *   The region to add settings to (eg. for payment processors usually billing-block)
+   *
    * @return CRM_Core_Resources
    */
-  public function addVars($nameSpace, $vars) {
-    $existing = CRM_Utils_Array::value($nameSpace, CRM_Utils_Array::value('vars', $this->settings), array());
+  public function addVars($nameSpace, $vars, $region = NULL) {
+    $existing = CRM_Utils_Array::value($nameSpace, CRM_Utils_Array::value('vars', $this->settings), []);
     $vars = $this->mergeSettings($existing, $vars);
-    $this->addSetting(array('vars' => array($nameSpace => $vars)));
+    $this->addSetting(['vars' => [$nameSpace => $vars]], $region);
     return $this;
   }
 
@@ -266,21 +281,28 @@ class CRM_Core_Resources {
    * Extensions and components should generally use addVars instead.
    *
    * @param array $settings
+   * @param string $region
+   *   The region to add settings to (eg. for payment processors usually billing-block)
+   *
    * @return CRM_Core_Resources
    */
-  public function addSetting($settings) {
-    $this->settings = $this->mergeSettings($this->settings, $settings);
-    if (!$this->addedSettings) {
+  public function addSetting($settings, $region = NULL) {
+    if (!$region) {
       $region = self::isAjaxMode() ? 'ajax-snippet' : 'html-header';
-      $resources = $this;
-      CRM_Core_Region::instance($region)->add(array(
-        'callback' => function (&$snippet, &$html) use ($resources) {
-          $html .= "\n" . $resources->renderSetting();
-        },
-        'weight' => -100000,
-      ));
-      $this->addedSettings = TRUE;
     }
+    $this->settings = $this->mergeSettings($this->settings, $settings);
+    if (isset($this->addedSettings[$region])) {
+      return $this;
+    }
+    $resources = $this;
+    $settingsResource = [
+      'callback' => function (&$snippet, &$html) use ($resources, $region) {
+        $html .= "\n" . $resources->renderSetting($region);
+      },
+      'weight' => -100000,
+    ];
+    CRM_Core_Region::instance($region)->add($settingsResource);
+    $this->addedSettings[$region] = TRUE;
     return $this;
   }
 
@@ -292,7 +314,7 @@ class CRM_Core_Resources {
    */
   public function addSettingsFactory($callable) {
     // Make sure our callback has been registered
-    $this->addSetting(array());
+    $this->addSetting([]);
     $this->settingsFactories[] = $callable;
     return $this;
   }
@@ -331,9 +353,9 @@ class CRM_Core_Resources {
    *
    * @return string
    */
-  public function renderSetting() {
+  public function renderSetting($region = NULL) {
     // On a standard page request we construct the CRM object from scratch
-    if (!self::isAjaxMode()) {
+    if (($region === 'html-header') || !self::isAjaxMode()) {
       $js = 'var CRM = ' . json_encode($this->getSettings()) . ';';
     }
     // For an ajax request we append to it
@@ -370,23 +392,23 @@ class CRM_Core_Resources {
    * And from javascript access it at CRM.myNamespace.myString
    *
    * @param string|array $text
-   * @param string|NULL $domain
+   * @param string|null $domain
    * @return CRM_Core_Resources
    */
   public function addString($text, $domain = 'civicrm') {
     foreach ((array) $text as $str) {
-      $translated = ts($str, array(
-        'domain' => ($domain == 'civicrm') ? NULL : array($domain, NULL),
+      $translated = ts($str, [
+        'domain' => ($domain == 'civicrm') ? NULL : [$domain, NULL],
         'raw' => TRUE,
-      ));
+      ]);
 
       // We only need to push this string to client if the translation
       // is actually different from the original
       if ($translated != $str) {
         $bucket = $domain == 'civicrm' ? 'strings' : 'strings::' . $domain;
-        $this->addSetting(array(
-          $bucket => array($str => $translated),
-        ));
+        $this->addSetting([
+          $bucket => [$str => $translated],
+        ]);
       }
     }
     return $this;
@@ -406,8 +428,12 @@ class CRM_Core_Resources {
    * @return CRM_Core_Resources
    */
   public function addStyleFile($ext, $file, $weight = self::DEFAULT_WEIGHT, $region = self::DEFAULT_REGION) {
-    $this->resolveFileName($file, $ext);
-    return $this->addStyleUrl($this->getUrl($ext, $file, TRUE), $weight, $region);
+    /** @var Civi\Core\Themes $theme */
+    $theme = Civi::service('themes');
+    foreach ($theme->resolveUrls($theme->getActiveThemeKey(), $ext, $file) as $url) {
+      $this->addStyleUrl($url, $weight, $region);
+    }
+    return $this;
   }
 
   /**
@@ -421,13 +447,13 @@ class CRM_Core_Resources {
    * @return CRM_Core_Resources
    */
   public function addStyleUrl($url, $weight = self::DEFAULT_WEIGHT, $region = self::DEFAULT_REGION) {
-    CRM_Core_Region::instance($region)->add(array(
-        'name' => $url,
-        'type' => 'styleUrl',
-        'styleUrl' => $url,
-        'weight' => $weight,
-        'region' => $region,
-      ));
+    CRM_Core_Region::instance($region)->add([
+      'name' => $url,
+      'type' => 'styleUrl',
+      'styleUrl' => $url,
+      'weight' => $weight,
+      'region' => $region,
+    ]);
     return $this;
   }
 
@@ -443,13 +469,13 @@ class CRM_Core_Resources {
    * @return CRM_Core_Resources
    */
   public function addStyle($code, $weight = self::DEFAULT_WEIGHT, $region = self::DEFAULT_REGION) {
-    CRM_Core_Region::instance($region)->add(array(
+    CRM_Core_Region::instance($region)->add([
         // 'name' => automatic
-        'type' => 'style',
-        'style' => $code,
-        'weight' => $weight,
-        'region' => $region,
-      ));
+      'type' => 'style',
+      'style' => $code,
+      'weight' => $weight,
+      'region' => $region,
+    ]);
     return $this;
   }
 
@@ -458,7 +484,7 @@ class CRM_Core_Resources {
    *
    * @param string $ext
    *   extension name; use 'civicrm' for core.
-   * @param string|NULL $file
+   * @param string|null $file
    *   file path -- relative to the extension base dir.
    *
    * @return bool|string
@@ -520,7 +546,7 @@ class CRM_Core_Resources {
   public function glob($ext, $patterns, $flags = NULL) {
     $path = $this->getPath($ext);
     $patterns = (array) $patterns;
-    $files = array();
+    $files = [];
     foreach ($patterns as $pattern) {
       if (preg_match(';^(assetBuilder|ext)://;', $pattern)) {
         $files[] = $pattern;
@@ -534,7 +560,8 @@ class CRM_Core_Resources {
         $files = array_merge($files, (array) glob("$path/$pattern", $flags));
       }
     }
-    sort($files); // Deterministic order.
+    // Deterministic order.
+    sort($files);
     $files = array_unique($files);
     return array_map(function ($file) use ($path) {
       return CRM_Utils_File::relativize($file, "$path/");
@@ -604,11 +631,11 @@ class CRM_Core_Resources {
         }
       }
       // Add global settings
-      $settings = array(
-        'config' => array(
+      $settings = [
+        'config' => [
           'isFrontend' => $config->userFrameworkFrontend,
-        ),
-      );
+        ],
+      ];
       // Disable profile creation if user lacks permission
       if (!CRM_Core_Permission::check('edit all contacts') && !CRM_Core_Permission::check('add contacts')) {
         $settings['config']['entityRef']['contactCreate'] = FALSE;
@@ -673,7 +700,7 @@ class CRM_Core_Resources {
   public static function outputLocalizationJS() {
     CRM_Core_Page_AJAX::setJsHeaders();
     $config = CRM_Core_Config::singleton();
-    $vars = array(
+    $vars = [
       'moneyFormat' => json_encode(CRM_Utils_Money::format(1234.56)),
       'contactSearch' => json_encode($config->includeEmailInName ? ts('Start typing a name or email...') : ts('Start typing a name...')),
       'otherSearch' => json_encode(ts('Enter search term...')),
@@ -683,7 +710,7 @@ class CRM_Core_Resources {
       'resourceCacheCode' => self::singleton()->getCacheCode(),
       'locale' => CRM_Core_I18n::getLocale(),
       'cid' => (int) CRM_Core_Session::getLoggedInContactID(),
-    );
+    ];
     print CRM_Core_Smarty::singleton()->fetchWith('CRM/common/l10n.js.tpl', $vars);
     CRM_Utils_System::civiExit();
   }
@@ -701,7 +728,7 @@ class CRM_Core_Resources {
 
     // Scripts needed by everyone, everywhere
     // FIXME: This is too long; list needs finer-grained segmentation
-    $items = array(
+    $items = [
       "bower_components/jquery/dist/jquery.min.js",
       "bower_components/jquery-ui/jquery-ui.min.js",
       "bower_components/jquery-ui/themes/smoothness/jquery-ui.min.css",
@@ -716,12 +743,13 @@ class CRM_Core_Resources {
       "bower_components/datatables/media/js/jquery.dataTables.min.js",
       "bower_components/datatables/media/css/jquery.dataTables.min.css",
       "bower_components/jquery-validation/dist/jquery.validate.min.js",
+      "bower_components/jquery-validation/dist/additional-methods.min.js",
       "packages/jquery/plugins/jquery.ui.datepicker.validation.min.js",
       "js/Common.js",
       "js/crm.datepicker.js",
       "js/crm.ajax.js",
       "js/wysiwyg/crm.wysiwyg.js",
-    );
+    ];
 
     // Dynamic localization script
     $items[] = $this->addCacheCode(
@@ -732,13 +760,13 @@ class CRM_Core_Resources {
     // add wysiwyg editor
     $editor = Civi::settings()->get('editor_id');
     if ($editor == "CKEditor") {
-      CRM_Admin_Page_CKEditorConfig::setConfigDefault();
-      $items[] = array(
-        'config' => array(
+      CRM_Admin_Form_CKEditorConfig::setConfigDefault();
+      $items[] = [
+        'config' => [
           'wysisygScriptLocation' => Civi::paths()->getUrl("[civicrm.root]/js/wysiwyg/crm.ckeditor.js"),
-          'CKEditorCustomConfig' => CRM_Admin_Page_CKEditorConfig::getConfigUrl(),
-        ),
-      );
+          'CKEditorCustomConfig' => CRM_Admin_Form_CKEditorConfig::getConfigUrl(),
+        ],
+      ];
     }
 
     // These scripts are only needed by back-office users
@@ -750,19 +778,29 @@ class CRM_Core_Resources {
     $contactID = CRM_Core_Session::getLoggedInContactID();
 
     // Menubar
-    $position = $contactID && CRM_Core_Permission::check('access CiviCRM') ? Civi::settings()->get('menubar_position') : 'none';
-    if ($position !== 'none' && !@constant('CIVICRM_DISABLE_DEFAULT_MENU') && !CRM_Core_Config::isUpgradeMode()) {
-      $cms = strtolower(CRM_Core_Config::singleton()->userFramework);
-      $cms = $cms === 'drupal' ? 'drupal7' : $cms;
+    $position = 'none';
+    if (
+      $contactID && !$config->userFrameworkFrontend
+      && CRM_Core_Permission::check('access CiviCRM')
+      && !@constant('CIVICRM_DISABLE_DEFAULT_MENU')
+      && !CRM_Core_Config::isUpgradeMode()
+    ) {
+      $position = Civi::settings()->get('menubar_position') ?: 'over-cms-menu';
+    }
+    if ($position !== 'none') {
       $items[] = 'bower_components/smartmenus/dist/jquery.smartmenus.min.js';
       $items[] = 'bower_components/smartmenus/dist/addons/keyboard/jquery.smartmenus.keyboard.min.js';
       $items[] = 'js/crm.menubar.js';
-      $items[] = 'bower_components/smartmenus/dist/css/sm-core-css.css';
-      $items[] = 'css/crm-menubar.css';
-      $items[] = "css/menubar-$cms.css";
+      // @see CRM_Core_Resources::renderMenubarStylesheet
+      $items[] = Civi::service('asset_builder')->getUrl('crm-menubar.css', [
+        'menubarColor' => Civi::settings()->get('menubar_color'),
+        'height' => 40,
+        'breakpoint' => 768,
+      ]);
+      // Variables for crm.menubar.js
       $items[] = [
         'menubar' => [
-          'position' => $position ?: 'over-cms-menu',
+          'position' => $position,
           'qfKey' => CRM_Core_Key::get('CRM_Contact_Controller_Search', TRUE),
           'cacheCode' => CRM_Core_BAO_Navigation::getCacheKey($contactID),
         ],
@@ -785,7 +823,7 @@ class CRM_Core_Resources {
       // Search for i18n file in order of specificity (try fr-CA, then fr)
       list($lang) = explode('_', $tsLocale);
       $path = "bower_components/jquery-ui/ui/i18n";
-      foreach (array(str_replace('_', '-', $tsLocale), $lang) as $language) {
+      foreach ([str_replace('_', '-', $tsLocale), $lang] as $language) {
         $localizationFile = "$path/datepicker-{$language}.js";
         if ($this->getPath('civicrm', $localizationFile)) {
           $items[] = $localizationFile;
@@ -797,6 +835,19 @@ class CRM_Core_Resources {
     // Allow hooks to modify this list
     CRM_Utils_Hook::coreResourceList($items, $region);
 
+    // Oof, existing listeners would expect $items to typically begin with 'bower_components/' or 'packages/'
+    // (using an implicit base of `[civicrm.root]`). We preserve the hook contract and cleanup $items post-hook.
+    $map = [
+      'bower_components' => rtrim(Civi::paths()->getUrl('[civicrm.bower]/.', 'absolute'), '/'),
+      'packages' => rtrim(Civi::paths()->getUrl('[civicrm.packages]/.', 'absolute'), '/'),
+    ];
+    $filter = function($m) use ($map) {
+      return $map[$m[1]] . $m[2];
+    };
+    $items = array_map(function($item) use ($filter) {
+      return is_array($item) ? $item : preg_replace_callback(';^(bower_components|packages)(/.*);', $filter, $item);
+    }, $items);
+
     return $items;
   }
 
@@ -805,16 +856,54 @@ class CRM_Core_Resources {
    *   is this page request an ajax snippet?
    */
   public static function isAjaxMode() {
-    if (in_array(CRM_Utils_Array::value('snippet', $_REQUEST), array(
-        CRM_Core_Smarty::PRINT_SNIPPET,
-        CRM_Core_Smarty::PRINT_NOFORM,
-        CRM_Core_Smarty::PRINT_JSON,
-      ))
+    if (in_array(CRM_Utils_Array::value('snippet', $_REQUEST), [
+      CRM_Core_Smarty::PRINT_SNIPPET,
+      CRM_Core_Smarty::PRINT_NOFORM,
+      CRM_Core_Smarty::PRINT_JSON,
+    ])
     ) {
       return TRUE;
     }
-    $url = CRM_Utils_System::getUrlPath();
-    return (strpos($url, 'civicrm/ajax') === 0) || (strpos($url, 'civicrm/angular') === 0);
+    list($arg0, $arg1) = array_pad(explode('/', CRM_Utils_System::currentPath()), 2, '');
+    return ($arg0 === 'civicrm' && in_array($arg1, ['ajax', 'angularprofiles', 'asset']));
+  }
+
+  /**
+   * @param \Civi\Core\Event\GenericHookEvent $e
+   * @see \CRM_Utils_Hook::buildAsset()
+   */
+  public static function renderMenubarStylesheet(GenericHookEvent $e) {
+    if ($e->asset !== 'crm-menubar.css') {
+      return;
+    }
+    $e->mimeType = 'text/css';
+    $content = '';
+    $config = CRM_Core_Config::singleton();
+    $cms = strtolower($config->userFramework);
+    $cms = $cms === 'drupal' ? 'drupal7' : $cms;
+    $items = [
+      'bower_components/smartmenus/dist/css/sm-core-css.css',
+      'css/crm-menubar.css',
+      "css/menubar-$cms.css",
+    ];
+    foreach ($items as $item) {
+      $content .= file_get_contents(self::singleton()->getPath('civicrm', $item));
+    }
+    $params = $e->params;
+    // "color" is deprecated in favor of the more specific "menubarColor"
+    $menubarColor = $params['color'] ?? $params['menubarColor'];
+    $vars = [
+      '$resourceBase' => rtrim($config->resourceBase, '/'),
+      '$menubarHeight' => $params['height'] . 'px',
+      '$breakMin' => $params['breakpoint'] . 'px',
+      '$breakMax' => ($params['breakpoint'] - 1) . 'px',
+      '$menubarColor' => $menubarColor,
+      '$menuItemColor' => $params['menuItemColor'] ?? $menubarColor,
+      '$highlightColor' => $params['highlightColor'] ?? CRM_Utils_Color::getHighlight($menubarColor),
+      '$textColor' => $params['textColor'] ?? CRM_Utils_Color::getContrast($menubarColor, '#333', '#ddd'),
+    ];
+    $vars['$highlightTextColor'] = $params['highlightTextColor'] ?? CRM_Utils_Color::getContrast($vars['$highlightColor'], '#333', '#ddd');
+    $e->content = str_replace(array_keys($vars), array_values($vars), $content);
   }
 
   /**
@@ -859,24 +948,28 @@ class CRM_Core_Resources {
       }
     }
 
-    CRM_Utils_Hook::entityRefFilters($data['filters']);
+    CRM_Utils_Hook::entityRefFilters($data['filters'], $data['links']);
 
     return $data;
   }
 
   /**
-   * In debug mode, look for a non-minified version of this file
+   * Determine the minified file name.
    *
-   * @param string $fileName
-   * @param string $extName
+   * @param string $ext
+   * @param string $file
+   * @return string
+   *   An updated $fileName. If a minified version exists and is supported by
+   *   system policy, the minified version will be returned. Otherwise, the original.
    */
-  private function resolveFileName(&$fileName, $extName) {
-    if (CRM_Core_Config::singleton()->debug && strpos($fileName, '.min.') !== FALSE) {
-      $nonMiniFile = str_replace('.min.', '.', $fileName);
-      if ($this->getPath($extName, $nonMiniFile)) {
-        $fileName = $nonMiniFile;
+  public function filterMinify($ext, $file) {
+    if (CRM_Core_Config::singleton()->debug && strpos($file, '.min.') !== FALSE) {
+      $nonMiniFile = str_replace('.min.', '.', $file);
+      if ($this->getPath($ext, $nonMiniFile)) {
+        $file = $nonMiniFile;
       }
     }
+    return $file;
   }
 
   /**

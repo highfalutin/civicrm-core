@@ -5,8 +5,10 @@
   <name>civicrm_contribution_recur</name>
   <add>1.6</add>
   <log>true</log>
+  <title>Recurring Contributions</title>
   <field>
     <name>id</name>
+    <uniqueName>contribution_recur_id</uniqueName>
     <title>Recurring Contribution ID</title>
     <type>int unsigned</type>
     <required>true</required>
@@ -40,7 +42,7 @@
     <title>Amount</title>
     <type>decimal</type>
     <required>true</required>
-    <comment>Amount to be contributed or charged each recurrence.</comment>
+    <comment>Amount to be collected (including any sales tax) by payment processor each recurrence.</comment>
     <add>1.6</add>
     <html>
       <type>Text</type>
@@ -59,6 +61,7 @@
       <keyColumn>name</keyColumn>
       <labelColumn>full_name</labelColumn>
       <nameColumn>name</nameColumn>
+      <abbrColumn>symbol</abbrColumn>
     </pseudoconstant>
     <html>
       <type>Select</type>
@@ -112,6 +115,8 @@
       <type>Select Date</type>
       <formatType>activityDateTime</formatType>
     </html>
+    <uniqueName>contribution_recur_start_date</uniqueName>
+    <uniqueTitle>Recurring Contribution Start Date</uniqueTitle>
   </field>
   <field>
     <name>create_date</name>
@@ -124,6 +129,8 @@
       <type>Select Date</type>
       <formatType>activityDateTime</formatType>
     </html>
+    <uniqueName>contribution_recur_create_date</uniqueName>
+    <uniqueTitle>Recurring Contribution Create Date</uniqueTitle>
   </field>
   <field>
     <name>modified_date</name>
@@ -135,6 +142,8 @@
       <type>Select Date</type>
       <formatType>activityDateTime</formatType>
     </html>
+    <uniqueName>contribution_recur_modified_date</uniqueName>
+    <uniqueTitle>Recurring Contribution Modified Date</uniqueTitle>
   </field>
   <field>
     <name>cancel_date</name>
@@ -146,6 +155,21 @@
       <type>Select Date</type>
       <formatType>activityDate</formatType>
     </html>
+    <uniqueName>contribution_recur_cancel_date</uniqueName>
+    <uniqueTitle>Recurring Contribution Cancel Date</uniqueTitle>
+  </field>
+  <field>
+    <name>cancel_reason</name>
+    <type>text</type>
+    <title>Cancellation Reason</title>
+    <uniqueName>contribution_recur_cancel_reason</uniqueName>
+    <uniqueTitle>Recurring Contribution Cancel Reason</uniqueTitle>
+    <comment>Free text field for a reason for cancelling</comment>
+    <html>
+      <type>Text</type>
+      <size>40</size>
+    </html>
+    <add>5.13</add>
   </field>
   <field>
     <name>end_date</name>
@@ -157,9 +181,12 @@
       <type>Select Date</type>
       <formatType>activityDate</formatType>
     </html>
+    <uniqueName>contribution_recur_end_date</uniqueName>
+    <uniqueTitle>Recurring Contribution End Date</uniqueTitle>
   </field>
   <field>
     <name>processor_id</name>
+    <uniqueName>contribution_recur_processor_id</uniqueName>
     <title>Processor ID</title>
     <type>varchar</type>
     <length>255</length>
@@ -185,6 +212,7 @@
   </foreignKey>
   <field>
     <name>trxn_id</name>
+    <uniqueName>contribution_recur_trxn_id</uniqueName>
     <title>Transaction ID</title>
     <type>varchar</type>
     <length>255</length>
@@ -219,13 +247,14 @@
   </index>
   <field>
     <name>contribution_status_id</name>
+    <uniqueName>contribution_recur_contribution_status_id</uniqueName>
     <title>Status</title>
     <type>int unsigned</type>
     <default>1</default>
     <import>true</import>
     <add>1.6</add>
     <pseudoconstant>
-      <optionGroupName>contribution_status</optionGroupName>
+      <optionGroupName>contribution_recur_status</optionGroupName>
     </pseudoconstant>
     <html>
       <type>Select</type>
@@ -258,13 +287,6 @@
       <type>Text</type>
     </html>
   </field>
-  <field>
-    <name>next_sched_contribution</name>
-    <type>datetime</type>
-    <comment>At Groundspring this was used by the cron job which triggered payments. If we''re not doing that but we know about payments, it might still be useful to store for display to org andor contributors.</comment>
-    <add>1.6</add>
-    <drop>4.4</drop>
-  </field>
     <field>
     <name>next_sched_contribution_date</name>
     <title>Next Scheduled Contribution Date</title>
@@ -275,6 +297,8 @@
       <type>Select Date</type>
       <formatType>activityDate</formatType>
     </html>
+    <uniqueName>contribution_recur_next_sched_contribution_date</uniqueName>
+    <uniqueTitle>Next Scheduled Recurring Contribution</uniqueTitle>
   </field>
   <field>
     <name>failure_count</name>
@@ -297,6 +321,8 @@
       <type>Select Date</type>
       <formatType>activityDate</formatType>
     </html>
+    <uniqueName>contribution_recur_failure_retry_date</uniqueName>
+    <uniqueTitle>Failed Recurring Contribution Retry Date</uniqueTitle>
   </field>
   <field>
     <name>auto_renew</name>
@@ -313,6 +339,7 @@
   <field>
     <name>payment_processor_id</name>
     <title>Payment Processor</title>
+    <uniqueName>contribution_recur_payment_processor_id</uniqueName>
     <type>int unsigned</type>
     <comment>Foreign key to civicrm_payment_processor.id</comment>
     <add>3.3</add>
@@ -330,23 +357,6 @@
     <table>civicrm_payment_processor</table>
     <key>id</key>
     <add>3.3</add>
-    <onDelete>SET NULL</onDelete>
-  </foreignKey>
-  <field>
-    <name>contribution_type_id</name>
-    <title>Contribution Type</title>
-    <export>false</export>
-    <type>int unsigned</type>
-    <comment>FK to Contribution Type</comment>
-    <add>4.1</add>
-    <drop>4.3</drop>
-  </field>
-  <foreignKey>
-    <name>contribution_type_id</name>
-    <table>civicrm_contribution_type</table>
-    <key>id</key>
-    <add>4.1</add>
-    <drop>4.3</drop>
     <onDelete>SET NULL</onDelete>
   </foreignKey>
   <field>

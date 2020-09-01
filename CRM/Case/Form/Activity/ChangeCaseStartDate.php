@@ -1,34 +1,18 @@
 <?php
 /*
  +--------------------------------------------------------------------+
- | CiviCRM version 5                                                  |
- +--------------------------------------------------------------------+
- | Copyright CiviCRM LLC (c) 2004-2019                                |
- +--------------------------------------------------------------------+
- | This file is a part of CiviCRM.                                    |
+ | Copyright CiviCRM LLC. All rights reserved.                        |
  |                                                                    |
- | CiviCRM is free software; you can copy, modify, and distribute it  |
- | under the terms of the GNU Affero General Public License           |
- | Version 3, 19 November 2007 and the CiviCRM Licensing Exception.   |
- |                                                                    |
- | CiviCRM is distributed in the hope that it will be useful, but     |
- | WITHOUT ANY WARRANTY; without even the implied warranty of         |
- | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.               |
- | See the GNU Affero General Public License for more details.        |
- |                                                                    |
- | You should have received a copy of the GNU Affero General Public   |
- | License and the CiviCRM Licensing Exception along                  |
- | with this program; if not, contact CiviCRM LLC                     |
- | at info[AT]civicrm[DOT]org. If you have questions about the        |
- | GNU Affero General Public License or the licensing of CiviCRM,     |
- | see the CiviCRM license FAQ at http://civicrm.org/licensing        |
+ | This work is published under the GNU AGPLv3 license with some      |
+ | permitted exceptions and without any warranty. For full license    |
+ | and copyright information, see https://civicrm.org/licensing       |
  +--------------------------------------------------------------------+
  */
 
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2019
+ * @copyright CiviCRM LLC https://civicrm.org/licensing
  */
 
 /**
@@ -43,10 +27,10 @@ class CRM_Case_Form_Activity_ChangeCaseStartDate {
    */
   public static function preProcess(&$form) {
     if (!isset($form->_caseId)) {
-      CRM_Core_Error::fatal(ts('Case Id not found.'));
+      CRM_Core_Error::statusBounce(ts('Case Id not found.'));
     }
     if (count($form->_caseId) != 1) {
-      CRM_Core_Resources::fatal(ts('Expected one case-type'));
+      CRM_Core_Error::statusBounce(ts('Expected one case-type'));
     }
   }
 
@@ -60,11 +44,11 @@ class CRM_Case_Form_Activity_ChangeCaseStartDate {
    * @return array
    */
   public static function setDefaultValues(&$form) {
-    $defaults = array();
+    $defaults = [];
 
     $openCaseActivityType = CRM_Core_PseudoConstant::getKey('CRM_Activity_BAO_Activity', 'activity_type_id', 'Open Case');
     $caseId = CRM_Utils_Array::first($form->_caseId);
-    $openCaseParams = array('activity_type_id' => $openCaseActivityType);
+    $openCaseParams = ['activity_type_id' => $openCaseActivityType];
     $openCaseInfo = CRM_Case_BAO_Case::getCaseActivityDates($caseId, $openCaseParams, TRUE);
     if (empty($openCaseInfo)) {
       $defaults['start_date'] = date('Y-m-d H:i:s');
@@ -144,7 +128,7 @@ class CRM_Case_Form_Activity_ChangeCaseStartDate {
       !$caseId ||
       !$caseType
     ) {
-      CRM_Core_Error::fatal('Required parameter missing for ChangeCaseType - end post processing');
+      CRM_Core_Error::statusBounce('Required parameter missing for ChangeCaseType - end post processing');
     }
 
     $config = CRM_Core_Config::singleton();
@@ -164,7 +148,7 @@ class CRM_Case_Form_Activity_ChangeCaseStartDate {
     $activity->save();
     // 2. initiate xml processor
     $xmlProcessor = new CRM_Case_XMLProcessor_Process();
-    $xmlProcessorParams = array(
+    $xmlProcessorParams = [
       'clientID' => $form->_currentlyViewedContactId,
       'creatorID' => $form->_currentUserId,
       'standardTimeline' => 0,
@@ -174,7 +158,7 @@ class CRM_Case_Form_Activity_ChangeCaseStartDate {
       'activityTypeName' => 'Change Case Start Date',
       'activitySetName' => 'standard_timeline',
       'resetTimeline' => 1,
-    );
+    ];
 
     $xmlProcessor->run($caseType, $xmlProcessorParams);
 
@@ -183,21 +167,21 @@ class CRM_Case_Form_Activity_ChangeCaseStartDate {
     if ($form->openCaseActivityId) {
 
       $abao = new CRM_Activity_BAO_Activity();
-      $oldParams = array('id' => $form->openCaseActivityId);
-      $oldActivityDefaults = array();
+      $oldParams = ['id' => $form->openCaseActivityId];
+      $oldActivityDefaults = [];
       $oldActivity = $abao->retrieve($oldParams, $oldActivityDefaults);
 
       // save the old values
       require_once 'api/v3/utils.php';
-      $openCaseParams = array();
+      $openCaseParams = [];
       //@todo calling api functions directly is not supported
       _civicrm_api3_object_to_array($oldActivity, $openCaseParams);
 
       // update existing revision
-      $oldParams = array(
+      $oldParams = [
         'id' => $form->openCaseActivityId,
         'is_current_revision' => 0,
-      );
+      ];
       $oldActivity = new CRM_Activity_DAO_Activity();
       $oldActivity->copyValues($oldParams);
       $oldActivity->save();
@@ -215,21 +199,21 @@ class CRM_Case_Form_Activity_ChangeCaseStartDate {
 
       $newActivity = CRM_Activity_BAO_Activity::create($openCaseParams);
       if (is_a($newActivity, 'CRM_Core_Error')) {
-        CRM_Core_Error::fatal('Unable to update Open Case activity');
+        CRM_Core_Error::statusBounce('Unable to update Open Case activity');
       }
       else {
         // Create linkage to case
-        $caseActivityParams = array(
+        $caseActivityParams = [
           'activity_id' => $newActivity->id,
           'case_id' => $caseId,
-        );
+        ];
 
         CRM_Case_BAO_Case::processCaseActivity($caseActivityParams);
 
-        $caseActivityParams = array(
+        $caseActivityParams = [
           'activityID' => $form->openCaseActivityId,
           'mainActivityId' => $newActivity->id,
-        );
+        ];
         CRM_Activity_BAO_Activity::copyExtendedActivityData($caseActivityParams);
       }
     }

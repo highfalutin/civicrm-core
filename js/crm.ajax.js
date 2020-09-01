@@ -1,9 +1,9 @@
 // https://civicrm.org/licensing
 /**
- * @see https://wiki.civicrm.org/confluence/display/CRMDOC/AJAX+Interface
- * @see https://wiki.civicrm.org/confluence/display/CRMDOC/Ajax+Pages+and+Forms
+ * @see https://docs.civicrm.org/dev/en/latest/api/interfaces/#ajax
+ * @see https://docs.civicrm.org/dev/en/latest/framework/ajax/
  */
-(function($, CRM, undefined) {
+(function($, CRM, _, undefined) {
   /**
    * @param string path
    * @param string|object query
@@ -23,13 +23,13 @@
     }
     query = query || '';
     var frag = path.split('?');
-    var url = tplURL[mode].replace("*path*", frag[0]);
+    var url = tplURL[mode].replace("civicrm-placeholder-url-path", frag[0]);
 
     if (!query) {
-      url = url.replace(/[?&]\*query\*/, '');
+      url = url.replace(/[?&]civicrm-placeholder-url-query=1/, '');
     }
     else {
-      url = url.replace("*query*", typeof query === 'string' ? query : $.param(query));
+      url = url.replace("civicrm-placeholder-url-query=1", typeof query === 'string' ? query : $.param(query));
     }
     if (frag[1]) {
       url += (url.indexOf('?') < 0 ? '?' : '&') + frag[1];
@@ -45,9 +45,51 @@
     });
   };
 
+  // result is an array, but in js, an array is also an object
+  // Assign all the metadata properties to it, mirroring the results arrayObject in php
+  function arrayObject(data) {
+    var result = data.values || [];
+    if (_.isArray(result)) {
+      delete(data.values);
+      _.assign(result, data);
+    }
+    return result;
+  }
+
+  // https://docs.civicrm.org/dev/en/latest/api/interfaces/#ajax
+  CRM.api4 = function(entity, action, params, index) {
+    return new Promise(function(resolve, reject) {
+      if (typeof entity === 'string') {
+        $.post(CRM.url('civicrm/ajax/api4/' + entity + '/' + action), {
+          params: JSON.stringify(params),
+          index: index
+        })
+          .done(function (data) {
+            resolve(arrayObject(data));
+          })
+          .fail(function (data) {
+            reject(data.responseJSON);
+          });
+      } else {
+        $.post(CRM.url('civicrm/ajax/api4'), {
+          calls: JSON.stringify(entity)
+        })
+          .done(function(data) {
+            _.each(data, function(item, key) {
+              data[key] = arrayObject(item);
+            });
+            resolve(data);
+          })
+          .fail(function (data) {
+            reject(data.responseJSON);
+          });
+      }
+    });
+  };
+
   /**
    * AJAX api
-   * @link http://wiki.civicrm.org/confluence/display/CRMDOC/AJAX+Interface#AJAXInterface-CRM.api3
+   * @link https://docs.civicrm.org/dev/en/latest/api/interfaces/#ajax
    */
   CRM.api3 = function(entity, action, params, status) {
     if (typeof(entity) === 'string') {
@@ -456,7 +498,7 @@
         var buttonContainers = '.crm-submit-buttons, .action-link',
           buttons = [],
           added = [];
-        $(buttonContainers, $el).find('input.crm-form-submit, a.button').each(function() {
+        $(buttonContainers, $el).find('input.crm-form-submit, a.button, button').each(function() {
           var $el = $(this),
             label = $el.is('input') ? $el.attr('value') : $el.text(),
             identifier = $el.attr('name') || $el.attr('href');
@@ -475,7 +517,7 @@
             added.push(identifier);
           }
           // display:none causes the form to not submit when pressing "enter"
-          $el.parents(buttonContainers).css({height: 0, padding: 0, margin: 0, overflow: 'hidden'}).find('.crm-button-icon').hide();
+          $el.parents(buttonContainers).css({height: 0, padding: 0, margin: 0, overflow: 'hidden'});
         });
         $el.dialog('option', 'buttons', buttons);
       }
@@ -572,8 +614,11 @@
           var currentHeight = $wrapper.outerHeight(),
             padding = currentHeight - $dialog.height(),
             newHeight = $dialog.prop('scrollHeight') + padding,
-            menuHeight = $('#civicrm-menu').outerHeight(),
-            maxHeight = $(window).height() - menuHeight;
+            menuHeight = $('#civicrm-menu').outerHeight();
+          if ($('body').hasClass('crm-menubar-below-cms-menu')) {
+            menuHeight += $('#civicrm-menu').offset().top;
+          }
+          var maxHeight = $(window).height() - menuHeight;
           newHeight = newHeight > maxHeight ? maxHeight : newHeight;
           if (newHeight > (currentHeight + 15)) {
             $dialog.dialog('option', {
@@ -585,4 +630,4 @@
       });
   });
 
-}(jQuery, CRM));
+}(jQuery, CRM, _));

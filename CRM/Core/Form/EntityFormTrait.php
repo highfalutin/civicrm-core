@@ -1,44 +1,34 @@
 <?php
 /*
-  +--------------------------------------------------------------------+
-  | CiviCRM version 5                                                  |
-  +--------------------------------------------------------------------+
-  | Copyright CiviCRM LLC (c) 2004-2019                                |
-  +--------------------------------------------------------------------+
-  | This file is a part of CiviCRM.                                    |
-  |                                                                    |
-  | CiviCRM is free software; you can copy, modify, and distribute it  |
-  | under the terms of the GNU Affero General Public License           |
-  | Version 3, 19 November 2007 and the CiviCRM Licensing Exception.   |
-  |                                                                    |
-  | CiviCRM is distributed in the hope that it will be useful, but     |
-  | WITHOUT ANY WARRANTY; without even the implied warranty of         |
-  | MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.               |
-  | See the GNU Affero General Public License for more details.        |
-  |                                                                    |
-  | You should have received a copy of the GNU Affero General Public   |
-  | License and the CiviCRM Licensing Exception along                  |
-  | with this program; if not, contact CiviCRM LLC                     |
-  | at info[AT]civicrm[DOT]org. If you have questions about the        |
-  | GNU Affero General Public License or the licensing of CiviCRM,     |
-  | see the CiviCRM license FAQ at http://civicrm.org/licensing        |
-  +--------------------------------------------------------------------+
+ +--------------------------------------------------------------------+
+ | Copyright CiviCRM LLC. All rights reserved.                        |
+ |                                                                    |
+ | This work is published under the GNU AGPLv3 license with some      |
+ | permitted exceptions and without any warranty. For full license    |
+ | and copyright information, see https://civicrm.org/licensing       |
+ +--------------------------------------------------------------------+
  */
 
 /**
  *
  * @package CRM
- * @copyright CiviCRM LLC (c) 2004-2019
+ * @copyright CiviCRM LLC https://civicrm.org/licensing
  */
-
 trait CRM_Core_Form_EntityFormTrait {
+
+  /**
+   * The id of the object being edited / created.
+   *
+   * @var int
+   */
+  public $_id;
 
   /**
    * The entity subtype ID (eg. for Relationship / Activity)
    *
    * @var int
    */
-  protected $_entitySubTypeId;
+  protected $_entitySubTypeId = NULL;
 
   /**
    * Get entity fields for the entity to be added to the form.
@@ -66,6 +56,20 @@ trait CRM_Core_Form_EntityFormTrait {
   }
 
   /**
+   * Set the delete message.
+   *
+   * We do this from the constructor in order to do a translation.
+   */
+  public function setDeleteMessage() {
+  }
+
+  /**
+   * Set entity fields to be assigned to the form.
+   */
+  protected function setEntityFields() {
+  }
+
+  /**
    * Get the entity id being edited.
    *
    * @return int|null
@@ -75,26 +79,51 @@ trait CRM_Core_Form_EntityFormTrait {
   }
 
   /**
-   * Get the entity subtype ID being edited
+   * Set the entity ID
    *
-   * @param $subTypeId
+   * @param int $id The entity ID
+   */
+  public function setEntityId($id) {
+    $this->_id = $id;
+  }
+
+  /**
+   * Should custom data be suppressed on this form.
+   *
+   * @return bool
+   */
+  protected function isSuppressCustomData() {
+    return FALSE;
+  }
+
+  /**
+   * Get the entity subtype ID being edited
    *
    * @return int|null
    */
-  public function getEntitySubTypeId($subTypeId) {
-    if ($subTypeId) {
-      return $subTypeId;
-    }
+  public function getEntitySubTypeId() {
     return $this->_entitySubTypeId;
+  }
+
+  /**
+   * Set the entity subtype ID being edited
+   *
+   * @param $subTypeId
+   */
+  public function setEntitySubTypeId($subTypeId) {
+    $this->_entitySubTypeId = $subTypeId;
   }
 
   /**
    * If the custom data is in the submitted data (eg. added via ajax loaded form) add to form.
    */
   public function addCustomDataToForm() {
+    if ($this->isSuppressCustomData()) {
+      return TRUE;
+    }
     $customisableEntities = CRM_Core_SelectValues::customGroupExtends();
     if (isset($customisableEntities[$this->getDefaultEntity()])) {
-      CRM_Custom_Form_CustomData::addToForm($this);
+      CRM_Custom_Form_CustomData::addToForm($this, $this->getEntitySubTypeId());
     }
   }
 
@@ -133,28 +162,26 @@ trait CRM_Core_Form_EntityFormTrait {
    */
   protected function addFormButtons() {
     if ($this->isViewContext() || $this->_action & CRM_Core_Action::PREVIEW) {
-      $this->addButtons(array(
-          array(
-            'type' => 'cancel',
-            'name' => ts('Done'),
-            'isDefault' => TRUE,
-          ),
-        )
-      );
+      $this->addButtons([
+        [
+          'type' => 'cancel',
+          'name' => ts('Done'),
+          'isDefault' => TRUE,
+        ],
+      ]);
     }
     else {
-      $this->addButtons(array(
-          array(
-            'type' => 'next',
-            'name' => $this->isDeleteContext() ? ts('Delete') : ts('Save'),
-            'isDefault' => TRUE,
-          ),
-          array(
-            'type' => 'cancel',
-            'name' => ts('Cancel'),
-          ),
-        )
-      );
+      $this->addButtons([
+        [
+          'type' => 'next',
+          'name' => $this->isDeleteContext() ? ts('Delete') : ts('Save'),
+          'isDefault' => TRUE,
+        ],
+        [
+          'type' => 'cancel',
+          'name' => ts('Cancel'),
+        ],
+      ]);
     }
   }
 
@@ -165,8 +192,7 @@ trait CRM_Core_Form_EntityFormTrait {
     $defaults = $moneyFields = [];
 
     if (!$this->isDeleteContext() &&
-      $this->getEntityId()
-    ) {
+      $this->getEntityId()) {
       $params = ['id' => $this->getEntityId()];
       $baoName = $this->_BAOName;
       $baoName::retrieve($params, $defaults);

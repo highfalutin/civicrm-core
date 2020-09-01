@@ -63,14 +63,16 @@ global $installURLPath;
 // Set the install type
 // this is sent as a query string when the page is first loaded
 // and subsequently posted to the page as a hidden field
-if (isset($_POST['civicrm_install_type'])) {
+// only permit acceptable installation types to prevent issues;
+$acceptableInstallTypes = ['drupal', 'wordpress', 'backdrop'];
+if (isset($_POST['civicrm_install_type']) && in_array($_POST['civicrm_install_type'], $acceptableInstallTypes)) {
   $installType = $_POST['civicrm_install_type'];
 }
-elseif (isset($_GET['civicrm_install_type'])) {
+elseif (isset($_GET['civicrm_install_type']) && in_array(strtolower($_GET['civicrm_install_type']), $acceptableInstallTypes)) {
   $installType = strtolower($_GET['civicrm_install_type']);
 }
 else {
-  // default value if not set
+  // default value if not set and not an acceptable install type.
   $installType = "drupal";
 }
 
@@ -87,6 +89,15 @@ else {
   $errorTitle = "Oops! Unsupported installation mode";
   $errorMsg = sprintf('%s: unknown installation mode. Please refer to the online documentation for more information.', $installType);
   errorDisplayPage($errorTitle, $errorMsg, FALSE);
+}
+
+$composerJsonPath = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'composer.json';
+if (file_exists($composerJsonPath)) {
+  $composerJson = json_decode(file_get_contents($composerJsonPath), 1);
+  $minPhpVer = preg_replace(';[~^];', '', $composerJson['require']['php']);
+  if (!version_compare(phpversion(), $minPhpVer, '>=')) {
+    errorDisplayPage('PHP Version Requirement', sprintf("CiviCRM requires PHP %s+. The web server is running PHP %s.", $minPhpVer, phpversion()), FALSE);
+  }
 }
 
 $pkgPath = $crmPath . DIRECTORY_SEPARATOR . 'packages';
@@ -118,7 +129,7 @@ $installTypeToUF = array(
   'backdrop' => 'Backdrop',
 );
 
-$uf = (isset($installTypeToUF[$installType]) ? $installTypeToUF[$installType] : 'Drupal');
+$uf = ($installTypeToUF[$installType] ?? 'Drupal');
 define('CIVICRM_UF', $uf);
 
 // Set the Locale (required by CRM_Core_Config)
@@ -126,6 +137,11 @@ global $tsLocale;
 
 $tsLocale = 'en_US';
 $seedLanguage = 'en_US';
+
+// Backwards compatibility with default location of l10n files
+if (!defined('CIVICRM_L10N_BASEDIR') && file_exists($crmPath . DIRECTORY_SEPARATOR . 'l10n')) {
+  define('CIVICRM_L10N_BASEDIR', $crmPath . DIRECTORY_SEPARATOR . 'l10n');
+}
 
 // CRM-16801 This validates that seedLanguage is valid by looking in $langs.
 // NB: the variable is initial a $_REQUEST for the initial page reload,
@@ -135,7 +151,7 @@ if (isset($_REQUEST['seedLanguage']) and isset($langs[$_REQUEST['seedLanguage']]
   $tsLocale = $_REQUEST['seedLanguage'];
 }
 
-$config = CRM_Core_Config::singleton(FALSE);
+CRM_Core_Config::singleton(FALSE);
 $GLOBALS['civicrm_default_error_scope'] = NULL;
 
 // The translation files are in the parent directory (l10n)
@@ -163,7 +179,7 @@ elseif ($installType == 'backdrop') {
   $object = new CRM_Utils_System_Backdrop();
   $cmsPath = $object->cmsRootPath();
   $siteDir = getSiteDir($cmsPath, $_SERVER['SCRIPT_FILENAME']);
-  $alreadyInstalled = file_exists($cmsPath . CIVICRM_DIRECTORY_SEPARATOR .     'civicrm.settings.php');
+  $alreadyInstalled = file_exists($cmsPath . CIVICRM_DIRECTORY_SEPARATOR . 'civicrm.settings.php');
 }
 elseif ($installType == 'wordpress') {
   $cmsPath = WP_PLUGIN_DIR . DIRECTORY_SEPARATOR . 'civicrm';
@@ -424,7 +440,10 @@ else {
  *  $description[2] - The test error to show, if it goes wrong
  */
 class InstallRequirements {
-  var $errors, $warnings, $tests, $conn;
+  public $errors;
+  public $warnings;
+  public $tests;
+  public $conn;
 
   // @see CRM_Upgrade_Form::MINIMUM_THREAD_STACK
   const MINIMUM_THREAD_STACK = 192;
@@ -461,11 +480,11 @@ class InstallRequirements {
         )
       )
       ) {
-        @$this->requireMySQLVersion("5.1",
+        @$this->requireMySQLVersion(CRM_Upgrade_Incremental_General::MIN_INSTALL_MYSQL_VER,
           array(
             ts("MySQL %1 Configuration", array(1 => $dbName)),
-            ts("MySQL version at least %1", array(1 => '5.1')),
-            ts("MySQL version %1 or higher is required, you are running MySQL %2.", array(1 => '5.1', 2 => mysqli_get_server_info($this->conn))),
+            ts("MySQL version at least %1", array(1 => CRM_Upgrade_Incremental_General::MIN_INSTALL_MYSQL_VER)),
+            ts("MySQL version %1 or higher is required, you are running MySQL %2.", array(1 => CRM_Upgrade_Incremental_General::MIN_INSTALL_MYSQL_VER, 2 => mysqli_get_server_info($this->conn))),
             ts("MySQL %1", array(1 => mysqli_get_server_info($this->conn))),
           )
         );
@@ -503,7 +522,7 @@ class InstallRequirements {
           )
         );
       }
-      $onlyRequire = ($dbName == 'Drupal' || $dbName == 'Backdrop') ? TRUE : FALSE;
+      $onlyRequire = $dbName == 'Drupal' || $dbName == 'Backdrop';
       $this->requireDatabaseOrCreatePermissions(
         $databaseConfig['server'],
         $databaseConfig['username'],
@@ -517,6 +536,17 @@ class InstallRequirements {
         $onlyRequire
       );
       if ($dbName != 'Drupal' && $dbName != 'Backdrop') {
+        $this->requireNoExistingData(
+          $databaseConfig['server'],
+          $databaseConfig['username'],
+          $databaseConfig['password'],
+          $databaseConfig['database'],
+          array(
+            ts("MySQL %1 Configuration", array(1 => $dbName)),
+            ts("Does the database have data from a previous installation?"),
+            ts("CiviCRM data from previous installation exists in '%1'.", array(1 => $databaseConfig['database'])),
+          )
+        );
         $this->requireMySQLInnoDB($databaseConfig['server'],
           $databaseConfig['username'],
           $databaseConfig['password'],
@@ -607,7 +637,7 @@ class InstallRequirements {
 
     $this->requirePHPVersion(array(
       ts("PHP Configuration"),
-      ts("PHP5 installed"),
+      ts("PHP7 installed"),
     ));
 
     // Check that we can identify the root folder successfully
@@ -685,16 +715,6 @@ class InstallRequirements {
         NULL,
       );
       $this->requireWriteable($dirName, $testDetails, TRUE);
-    }
-
-    //check for Config.IDS.ini, file may exist in re-install
-    $configIDSiniDir = array($cmsPath, 'sites', $siteDir, 'files', 'civicrm', 'upload', 'Config.IDS.ini');
-
-    if (is_array($configIDSiniDir) && !empty($configIDSiniDir)) {
-      $configIDSiniFile = implode(CIVICRM_DIRECTORY_SEPARATOR, $configIDSiniDir);
-      if (file_exists($configIDSiniFile)) {
-        unlink($configIDSiniFile);
-      }
     }
 
     // Check for rewriting
@@ -889,7 +909,7 @@ class InstallRequirements {
         $testDetails[2] = ts('This webserver is running an outdated version of PHP (%1). It is strongly recommended to upgrade to PHP %2 or later, as older versions can present a security risk. The preferred version is %3.', array(
           1 => $phpVersion,
           2 => CRM_Upgrade_Incremental_General::MIN_RECOMMENDED_PHP_VER,
-          3 => CRM_Upgrade_Incremental_General::RECOMMENDED_PHP_VER,
+          3 => preg_replace(';^(\d+\.\d+(?:\.[1-9]\d*)?).*$;', '\1', CRM_Upgrade_Incremental_General::RECOMMENDED_PHP_VER),
         ));
         $this->warning($testDetails);
       }
@@ -1049,8 +1069,14 @@ class InstallRequirements {
         return TRUE;
       }
       else {
-        $testDetails[2] .= "{$majorHas}.{$minorHas}.";
-        $this->error($testDetails);
+        $versionDetails = mysqli_query($this->conn, 'SELECT version() as version')->fetch_assoc();
+        if (version_compare($versionDetails['version'], $min) == -1) {
+          $testDetails[2] .= "{$majorHas}.{$minorHas}.";
+          $this->error($testDetails);
+        }
+        else {
+          return TRUE;
+        }
       }
     }
   }
@@ -1112,12 +1138,13 @@ class InstallRequirements {
       return;
     }
 
-    $result = mysqli_query($conn, 'CREATE TEMPORARY TABLE civicrm_install_temp_table_test (test text)');
+    $tempTableName = CRM_Utils_SQL_TempTable::build()->setCategory('install')->getName();
+    $result = mysqli_query($conn, 'CREATE TEMPORARY TABLE ' . $tempTableName . ' (test text)');
     if (!$result) {
       $testDetails[2] = ts('Could not create a temp table.');
       $this->error($testDetails);
     }
-    $result = mysqli_query($conn, 'DROP TEMPORARY TABLE civicrm_install_temp_table_test');
+    $result = mysqli_query($conn, 'DROP TEMPORARY TABLE ' . $tempTableName);
   }
 
   /**
@@ -1159,7 +1186,6 @@ class InstallRequirements {
     mysqli_query($conn, 'DROP TABLE civicrm_install_temp_table_test');
   }
 
-
   /**
    * @param $server
    * @param string $username
@@ -1182,18 +1208,19 @@ class InstallRequirements {
       return;
     }
 
-    $result = mysqli_query($conn, 'CREATE TEMPORARY TABLE civicrm_install_temp_table_test (test text)');
+    $tempTableName = CRM_Utils_SQL_TempTable::build()->setCategory('install')->getName();
+    $result = mysqli_query($conn, 'CREATE TEMPORARY TABLE ' . $tempTableName . ' (test text)');
     if (!$result) {
       $testDetails[2] = ts('Could not create a table in the database.');
       $this->error($testDetails);
       return;
     }
 
-    $result = mysqli_query($conn, 'LOCK TABLES civicrm_install_temp_table_test WRITE');
+    $result = mysqli_query($conn, 'LOCK TABLES ' . $tempTableName . ' WRITE');
     if (!$result) {
       $testDetails[2] = ts('Could not obtain a write lock for the database table.');
       $this->error($testDetails);
-      $result = mysqli_query($conn, 'DROP TEMPORARY TABLE civicrm_install_temp_table_test');
+      $result = mysqli_query($conn, 'DROP TEMPORARY TABLE ' . $tempTableName);
       return;
     }
 
@@ -1201,11 +1228,11 @@ class InstallRequirements {
     if (!$result) {
       $testDetails[2] = ts('Could not release the lock for the database table.');
       $this->error($testDetails);
-      $result = mysqli_query($conn, 'DROP TEMPORARY TABLE civicrm_install_temp_table_test');
+      $result = mysqli_query($conn, 'DROP TEMPORARY TABLE ' . $tempTableName);
       return;
     }
 
-    $result = mysqli_query($conn, 'DROP TEMPORARY TABLE civicrm_install_temp_table_test');
+    $result = mysqli_query($conn, 'DROP TEMPORARY TABLE ' . $tempTableName);
   }
 
   /**
@@ -1263,7 +1290,8 @@ class InstallRequirements {
       return;
     }
 
-    $result = mysqli_query($conn, "SHOW VARIABLES LIKE 'thread_stack'"); // bytes => kb
+    // bytes => kb
+    $result = mysqli_query($conn, "SHOW VARIABLES LIKE 'thread_stack'");
     if (!$result) {
       $testDetails[2] = ts('Could not get information about the thread_stack of the database.');
       $this->error($testDetails);
@@ -1275,6 +1303,37 @@ class InstallRequirements {
         $this->error($testDetails);
       }
     }
+  }
+
+  /**
+   * @param $server
+   * @param $username
+   * @param $password
+   * @param $database
+   * @param $testDetails
+   */
+  public function requireNoExistingData(
+    $server,
+    $username,
+    $password,
+    $database,
+    $testDetails
+  ) {
+    $this->testing($testDetails);
+    $conn = $this->connect($server, $username, $password);
+
+    @mysqli_select_db($conn, $database);
+    $contactRecords = mysqli_query($conn, "SELECT count(*) as contactscount FROM civicrm_contact");
+    if ($contactRecords) {
+      $contactRecords = mysqli_fetch_object($contactRecords);
+      if ($contactRecords->contactscount > 0) {
+        $this->error($testDetails);
+        return;
+      }
+    }
+
+    $testDetails[3] = ts('CiviCRM data from previous installation does not exist in %1.', array(1 => $database));
+    $this->testing($testDetails);
   }
 
   /**
@@ -1374,7 +1433,7 @@ class InstallRequirements {
     $result = mysqli_query($conn, 'DROP TABLE civicrm_utf8mb4_test');
 
     // Ensure that the MySQL driver supports utf8mb4 encoding.
-    $version = mysqli_get_client_info($conn);
+    $version = mysqli_get_client_info();
     if (strpos($version, 'mysqlnd') !== FALSE) {
       // The mysqlnd driver supports utf8mb4 starting at version 5.0.9.
       $version = preg_replace('/^\D+([\d.]+).*/', '$1', $version);
@@ -1477,6 +1536,7 @@ class InstallRequirements {
  * Class Installer
  */
 class Installer extends InstallRequirements {
+
   /**
    * @param $server
    * @param $username
@@ -1687,10 +1747,9 @@ class Installer extends InstallRequirements {
         //change the default language to one chosen
         if (isset($config['seedLanguage']) && $config['seedLanguage'] != 'en_US') {
           civicrm_api3('Setting', 'create', array(
-              'domain_id' => 'current_domain',
-              'lcMessages' => $config['seedLanguage'],
-            )
-          );
+            'domain_id' => 'current_domain',
+            'lcMessages' => $config['seedLanguage'],
+          ));
         }
 
         $output .= '</ul>';
@@ -1870,7 +1929,7 @@ function getSiteDir($cmsPath, $str) {
     preg_quote($modules, CIVICRM_DIRECTORY_SEPARATOR) . "/",
     $_SERVER['SCRIPT_FILENAME'], $matches
   );
-  $siteDir = isset($matches[1]) ? $matches[1] : 'default';
+  $siteDir = $matches[1] ?? 'default';
 
   if (strtolower($siteDir) == 'all') {
     // For this case - use drupal's way of finding out multi-site directory

@@ -8,6 +8,7 @@
     data: null,
     settings: {collapsibleBehavior: 'accordion'},
     position: 'over-cms-menu',
+    toggleButton: true,
     attachTo: (CRM.menubar && CRM.menubar.position === 'above-crm-container') ? '#crm-container' : 'body',
     initialize: function() {
       var cache = CRM.cache.get('menubar');
@@ -78,12 +79,17 @@
             })
             .on('show.smapi', function(e, menu) {
               // Focus menu when opened with an accesskey
-              $(menu).siblings('a[accesskey]:not(:hover)').focus();
+              if ($(menu).parent().data('name') === 'Home') {
+                $('#crm-menubar-drilldown').focus();
+              } else {
+                $(menu).siblings('a[accesskey]').focus();
+              }
             })
             .smartmenus(CRM.menubar.settings);
           initialized = true;
           CRM.menubar.initializeResponsive();
           CRM.menubar.initializeSearch();
+          CRM.menubar.initializeDrill();
         });
       }
     },
@@ -115,15 +121,13 @@
         .addClass('crm-menubar-hidden')
         .removeClass('crm-menubar-visible');
       if (showMessage === true && $('#crm-notification-container').length && initialized) {
-        var alert = CRM.alert('<a href="#" id="crm-restore-menu" style="text-align: center; margin-top: -8px;">' + _.escape(ts('Restore CiviCRM Menu')) + '</a>', '', 'none', {expires: 10000});
+        var alert = CRM.alert('<a href="#" id="crm-restore-menu" >' + _.escape(ts('Restore CiviCRM Menu')) + '</a>', ts('Menu hidden'), 'none', {expires: 10000});
         $('#crm-restore-menu')
-          .button({icons: {primary: 'fa-undo'}})
           .click(function(e) {
             e.preventDefault();
             alert.close();
             CRM.menubar.show(speed);
-          })
-          .parent().css('text-align', 'center').find('.ui-button-text').css({'padding-top': '4px', 'padding-bottom': '4px'});
+          });
       }
     },
     open: function(itemName) {
@@ -145,6 +149,9 @@
     },
     getItem: function(itemName) {
       return traverse(CRM.menubar.data.menu, itemName, 'get');
+    },
+    findItems: function(searchTerm) {
+      return findRecursive(CRM.menubar.data.menu, searchTerm.toLowerCase().replace(/ /g, ''));
     },
     addItems: function(position, targetName, items) {
       var list, container, $ul;
@@ -225,16 +232,23 @@
       }
     },
     initializePosition: function() {
-      if (CRM.menubar.position === 'over-cms-menu' || CRM.menubar.position === 'below-cms-menu') {
+      if (CRM.menubar.toggleButton && (CRM.menubar.position === 'over-cms-menu' || CRM.menubar.position === 'below-cms-menu')) {
         $('#civicrm-menu')
           .on('click', 'a[href="#toggle-position"]', function(e) {
             e.preventDefault();
             CRM.menubar.togglePosition();
           })
-          .append('<li id="crm-menubar-toggle-position"><a href="#toggle-position" title="' + ts('Adjust menu position') + '"><i class="crm-i fa-arrow-up"></i></a>');
+          .append('<li id="crm-menubar-toggle-position"><a href="#toggle-position" title="' + ts('Adjust menu position') + '"><i class="crm-i fa-arrow-up" aria-hidden="true"></i></a>');
         CRM.menubar.position = CRM.cache.get('menubarPosition', CRM.menubar.position);
       }
       $('body').addClass('crm-menubar-visible crm-menubar-' + CRM.menubar.position);
+    },
+    removeToggleButton: function() {
+      $('#crm-menubar-toggle-position').remove();
+      CRM.menubar.toggleButton = false;
+      if (CRM.menubar.position === 'below-cms-menu') {
+        CRM.menubar.togglePosition();
+      }
     },
     initializeResponsive: function() {
       var $mainMenuState = $('#crm-menubar-state');
@@ -246,7 +260,7 @@
         }
       })
         .on('resize', function() {
-          if ($(window).width() >= 768 && $mainMenuState[0].checked) {
+          if (!isMobile() && $mainMenuState[0].checked) {
             $mainMenuState[0].click();
           }
           handleResize();
@@ -351,10 +365,6 @@
         var $selection = $('.crm-quickSearchField input:checked'),
           label = $selection.parent().text(),
           value = $selection.val();
-        // These fields are not supported by advanced search
-        if (!value || value === 'first_name' || value === 'last_name') {
-          value = 'sort_name';
-        }
         $('#crm-qsearch-input').attr({name: value, placeholder: '\uf002 ' + label});
       }
       $('.crm-quickSearchField').click(function() {
@@ -367,10 +377,23 @@
           $('#crm-qsearch-input').focus().autocomplete("search");
         }, 1);
       });
-      $('.crm-quickSearchField input[value="' + CRM.cache.get('quickSearchField', 'sort_name') + '"]').prop('checked', true);
+      var savedDefault = CRM.cache.get('quickSearchField');
+      if (savedDefault) {
+        $('.crm-quickSearchField input[value="' + savedDefault + '"]').prop('checked', true);
+      } else {
+        $('.crm-quickSearchField:first input').prop('checked', true);
+      }
       setQuickSearchValue();
       $('#civicrm-menu').on('activate.smapi', function(e, item) {
         return !$('ul.crm-quickSearch-results').is(':visible:not(.ui-state-disabled)');
+      });
+    },
+    initializeDrill: function() {
+      $('#civicrm-menu').on('keyup', '#crm-menubar-drilldown', function() {
+        var term = $(this).val(),
+          results = term ? CRM.menubar.findItems(term).slice(0, 20) : [];
+        $(this).parent().next('ul').html(getTpl('branch')({items: results, branchTpl: getTpl('branch'), drillTpl: _.noop}));
+        $('#civicrm-menu').smartmenus('refresh').smartmenus('itemActivate', $(this).closest('a'));
       });
     },
     treeTpl:
@@ -405,6 +428,11 @@
           '<% }) %>' +
         '</ul>' +
       '</li>',
+    drillTpl:
+      '<li class="crm-menu-border-bottom" data-name="MenubarDrillDown">' +
+        '<a href="#"><input type="text" id="crm-menubar-drilldown" placeholder="' + _.escape(ts('Find menu item...')) + '"></a>' +
+        '<ul></ul>' +
+      '</li>',
     branchTpl:
       '<% _.forEach(items, function(item) { %>' +
         '<li <%= attr("li", item) %>>' +
@@ -417,7 +445,10 @@
             '<% } %>' +
           '</a>' +
           '<% if (item.child) { %>' +
-            '<ul><%= branchTpl({items: item.child, branchTpl: branchTpl}) %></ul>' +
+            '<ul>' +
+              '<% if (item.name === "Home") { %><%= drillTpl() %><% } %>' +
+              '<%= branchTpl({items: item.child, branchTpl: branchTpl}) %>' +
+            '</ul>' +
           '<% } %>' +
         '</li>' +
       '<% }) %>'
@@ -426,20 +457,26 @@
   function getTpl(name) {
     if (!templates) {
       templates = {
-        branch: _.template(CRM.menubar.branchTpl, {imports: {_: _, attr: attr}}),
+        drill: _.template(CRM.menubar.drillTpl, {}),
         search: _.template(CRM.menubar.searchTpl, {imports: {_: _, ts: ts, CRM: CRM}})
       };
+      templates.branch = _.template(CRM.menubar.branchTpl, {imports: {_: _, attr: attr, drillTpl: templates.drill}});
       templates.tree = _.template(CRM.menubar.treeTpl, {imports: {branchTpl: templates.branch, searchTpl: templates.search, ts: ts}});
     }
     return templates[name];
   }
 
   function handleResize() {
-    if ($(window).width() >= 768 && $('#civicrm-menu').height() > 50) {
+    if (!isMobile() && ($('#civicrm-menu').height() >= (2 * $('#civicrm-menu > li').height()))) {
       $('body').addClass('crm-menubar-wrapped');
     } else {
       $('body').removeClass('crm-menubar-wrapped');
     }
+  }
+
+  // Figure out if we've hit the mobile breakpoint, based on the rule in crm-menubar.css
+  function isMobile() {
+    return $('.crm-menubar-toggle-btn', '#civicrm-menu-nav').css('top') !== '-99999px';
   }
 
   function traverse(items, itemName, op) {
@@ -462,8 +499,23 @@
     return found;
   }
 
+  function findRecursive(collection, searchTerm) {
+    var items = _.filter(collection, function(item) {
+      return item.label && _.includes(item.label.toLowerCase().replace(/ /g, ''), searchTerm);
+    });
+    _.each(collection, function(item) {
+      if (_.isPlainObject(item) && item.child) {
+        var childMatches = findRecursive(item.child, searchTerm);
+        if (childMatches.length) {
+          Array.prototype.push.apply(items, childMatches);
+        }
+      }
+    });
+    return items;
+  }
+
   function attr(el, item) {
-    var ret = [], attr = _.cloneDeep(item.attr || {}), a = ['rel', 'accesskey'];
+    var ret = [], attr = _.cloneDeep(item.attr || {}), a = ['rel', 'accesskey', 'target'];
     if (el === 'a') {
       attr = _.pick(attr, a);
       attr.href = item.url || "#";
